@@ -13,5 +13,12 @@ return static function (string $pluginFile) {
     add_filter($checker->getUniqueName('vcs_update_detection_strategies'), static function (array $strategies): array {
         return array_intersect_key($strategies, [Api::STRATEGY_LATEST_RELEASE => true]);
     });
+    // A local Git checkout can be shared by symlinks; WordPress must not replace its .git directory.
+    if (is_dir(dirname($pluginFile) . '/.git')) {
+        add_filter($checker->getUniqueName('pre_inject_update'), static fn($update) => null);
+        add_filter('auto_update_plugin', static function ($update, $item) use ($checker) {
+            return isset($item->plugin) && $item->plugin === $checker->pluginFile ? false : $update;
+        }, 10, 2);
+    }
     return $checker;
 };

@@ -228,3 +228,9 @@ De MIT-licentie en bronbestanden van Plugin Update Checker staan onder `includes
 Updater toegevoegd voor de gewone WordPress-pluginpagina, naast de bestaande lokale softwareoverdracht. De lokale integratieblokkering laat uitsluitend leesverzoeken naar de update-endpoints van emonks Dashboard en Site Factory door. De releaseworkflow levert een runtimepakket met de updaterbibliotheek en haar licentie.
 
 Gebruik de Git-repository als ontwikkelbron. Installeer de release-zip op de WordPress-omgevingen die je via de pluginpagina wilt bijwerken; een WordPress-update vervangt de pluginmap en kan daardoor een daarin aanwezige `.git`-map verwijderen.
+
+## Eén lokale bron voor Skeletor en sites.test
+
+Gebruikersafspraak van 15 oktober 2026: houd de code van Skeletor en sites.test fysiek op één plek, net als het gedeelde thema. De Git-repositories onder `/Users/jeffreypisa/Sites/skeletor/wp-content/plugins/emonks-dashboard` en `emonks-sitefactory` zijn de enige ontwikkelbron. De pluginmappen op `/Users/jeffreypisa/Sites/site-factory/wp-content/plugins` verwijzen daar met symbolische koppelingen naartoe. De oude bronlocatie `/Users/jeffreypisa/Sites/sitefactory` blijft als koppeling naar de Site Factory-repository beschikbaar voor bestaande scripts. Maak geen aparte runtimekopieën voor deze lokale installaties. Instellingen en inhoud blijven per WordPress-installatie of site in de database opgeslagen.
+
+Git-werkmappen worden door de updater uitgesloten van WordPress-updatemeldingen en automatische pluginupdates, zodat WordPress de gedeelde bron en Git-geschiedenis niet vervangt. Pas lokale code aan of haal wijzigingen op in de centrale repository. Normale installaties uit een release-zip bevatten geen `.git` en gebruiken wel de gewone WordPress-updater.

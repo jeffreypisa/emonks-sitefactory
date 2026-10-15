@@ -32,9 +32,22 @@ global $wp_filesystem;
 $old_filesystem = $wp_filesystem;
 $temp = get_temp_dir() . 'emonks-updater-' . wp_generate_uuid4();
 try {
-    $checker = (require $root . '/includes/Updater.php')($root . '/' . $main);
+    $checker = null;
+    global $wp_filter;
+    foreach (($wp_filter['upgrader_source_selection']->callbacks ?? []) as $callbacks) {
+        foreach ($callbacks as $entry) {
+            $callback = $entry['function'];
+            if (is_array($callback) && is_object($callback[0]) && ($callback[0]->slug ?? null) === $repo) $checker = $callback[0];
+        }
+    }
+    if (!$checker) $checker = (require $root . '/includes/Updater.php')($root . '/' . $main);
     $expect($checker->pluginFile === plugin_basename($root . '/' . $main), 'Plugin identity changed.');
-    $expect($checker->directoryName === basename($root), 'Installation directory is not preserved.');
+    $expect($checker->directoryName === dirname(plugin_basename($root . '/' . $main)), 'Installation directory is not preserved.');
+    if (is_dir($root . '/.git')) {
+        $expect(apply_filters($checker->getUniqueName('pre_inject_update'), (object) ['version' => '9.8.7']) === null, 'Git checkout still receives WordPress update offers.');
+        $expect(apply_filters('auto_update_plugin', true, (object) ['plugin' => $checker->pluginFile]) === false, 'Git checkout can be automatically replaced.');
+        $expect(apply_filters('auto_update_plugin', true, (object) ['plugin' => 'unrelated/plugin.php']) === true, 'Another plugin has been affected.');
+    }
     $update = $checker->requestUpdate();
     $expect($update && $update->version === '9.8.7', 'New release not recognized inside WordPress.');
     $native = $update->toWpFormat();
@@ -48,7 +61,7 @@ try {
     $skin = new class(['plugin' => $checker->pluginFile]) extends Plugin_Upgrader_Skin { public function feedback($feedback, ...$args) {} };
     $upgrader = new Plugin_Upgrader($skin);
     $source = $checker->fixDirectoryName($temp . '/package/', $temp . '/', $upgrader);
-    $expect(!is_wp_error($source) && $source === $temp . '/' . basename($root) . '/', 'Update changed the installed plugin directory.');
+    $expect(!is_wp_error($source) && $source === $temp . '/' . $checker->directoryName . '/', 'Update changed the installed plugin directory.');
     $expect(is_file($source . $main), 'The main plugin file was lost during extraction correction.');
     echo "$repo: $checks WordPress update and directory checks passed; no plugin installed.\n";
 } finally {
