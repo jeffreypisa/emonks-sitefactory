@@ -1,0 +1,123 @@
+<?php
+/** Run only using wp eval-file in an EMPTY disposable Multisite database. */
+use Emonks\Factory\Online\{Receiver,Store,Privacy,Preview,ContentChanges};
+use Emonks\Factory\Package;
+if (getenv('EMSF_DISPOSABLE_TEST') !== 'yes' || !str_contains(ABSPATH, 'emsf-integration') || (int)get_sites(['count'=>true]) !== 1) { throw new RuntimeException('Requires an empty disposable emsf-integration network.'); }
+global $checks, $png;
+$checks=0;
+function check($ok,$message){global $checks;if(!$ok){throw new RuntimeException('FAIL: '.$message);} $checks++; echo "PASS: $message\n";}
+function fails(callable $fn,string $message){try{$fn();}catch(Throwable $e){check(true,$message.' ('.$e->getMessage().')');return;}throw new RuntimeException('FAIL expected rejection: '.$message);}
+function req(array $data){$r=new WP_REST_Request('POST');$r->set_header('Content-Type','application/json');$r->set_body(wp_json_encode($data));return $r;}
+$source=wp_generate_uuid4();$operation=wp_generate_uuid4();
+$manifest=['format'=>Package::FORMAT,'version'=>1,'theme'=>'skeletor','prospect'=>['uuid'=>$source,'name'=>'Test klant'],'dependencies'=>['theme_version'=>'test','acf_version'=>ACF_VERSION,'theme_digest'=>Package::theme_digest()],'unsupported'=>[], 'models'=>[], 'posts'=>[['ref'=>'post:page:home','post'=>['post_type'=>'page','post_status'=>'publish','post_name'=>'home','post_title'=>'Home','post_content'=>'<a href="{{emsf:home}}/contact/">Contact</a>','post_excerpt'=>''],'parent'=>0,'meta'=>[],'terms'=>[]]],'terms'=>[],'menus'=>[],'forms'=>[],'menu_locations'=>[],'files'=>[],'options'=>['blogname'=>'Test klant','blogdescription'=>'Voorstel','show_on_front'=>'page','page_on_front'=>['$ref'=>'post:page:home'],'page_for_posts'=>['$literal'=>0],'permalink_structure'=>'/%postname%/']];
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jkJ8AAAAASUVORK5CYII=');
+$manifest['files']['media/test.png']=['sha256'=>hash('sha256',$png),'size'=>strlen($png)];
+$manifest['posts'][]=['ref'=>'post:attachment:photo','post'=>['post_type'=>'attachment','post_status'=>'inherit','post_name'=>'photo','post_title'=>'Photo','post_content'=>'','post_excerpt'=>'','post_mime_type'=>'image/png'],'parent'=>0,'meta'=>[],'terms'=>[],'file'=>'media/test.png'];
+$manifest['posts'][0]['meta']['_thumbnail_id']=[['$ref'=>'post:attachment:photo']];
+$manifest['models'][]=['key'=>'post_type_testproject','post_type'=>'testproject','title'=>'Projects','active'=>true,'public'=>true,'labels'=>['name'=>'Projects','singular_name'=>'Project'],'rewrite'=>['permalink_rewrite'=>'custom_permalink','slug'=>'projects','with_front'=>false,'feeds'=>false,'pages'=>true]];
+$manifest['posts'][]=['ref'=>'post:testproject:example','post'=>['post_type'=>'testproject','post_status'=>'publish','post_name'=>'example','post_title'=>'Project','post_content'=>'','post_excerpt'=>''],'parent'=>0,'meta'=>[],'terms'=>[]];
+$manifest['posts'][0]['post']['post_content'].='<a href="{{emsf:url:post:testproject:example}}">Project</a>';
+$manifest['terms'][]=['ref'=>'term:category:test','taxonomy'=>'category','slug'=>'test','name'=>'Test category','parent'=>0,'description'=>''];
+$manifest['posts'][0]['terms']['category']=[['$ref'=>'term:category:test']];
+$manifest['menus'][]=['ref'=>'menu:main','name'=>'Main','slug'=>'main','items'=>[['source_id'=>42,'parent_source_id'=>0,'title'=>'Home','type'=>'post_type','object'=>'page','object_ref'=>['$ref'=>'post:page:home'],'url'=>'{{emsf:url:post:page:home}}','target'=>'','classes'=>[],'xfn'=>'','position'=>1]]];
+$manifest['menu_locations']['primary']=['$ref'=>'menu:main'];
+function uploadTestAsset(array $p){global $png;return Receiver::asset(req($p+['name'=>'media/test.png','bytes'=>base64_encode($png)]));}
+$account=['name'=>'First Customer','username'=>'first_customer','email'=>'first-customer@example.invalid','confirmed'=>true,'layout_access'=>false];
+$payload=['customer'=>$account,'source'=>$source,'operation'=>$operation,'action'=>'create','slug'=>'klant','confirm'=>'','manifest'=>$manifest];
+wp_set_current_user(1);
+check(!Receiver::permission(),'Cookie-only/CLI auth does not authorize remote API');
+$_SERVER['HTTPS']='on';
+add_filter('application_password_is_api_request','__return_true');
+[$applicationPassword] = WP_Application_Passwords::create_new_application_password(1,['name'=>'Disposable test']);
+$authenticated=wp_authenticate_application_password(null,'testadmin',$applicationPassword);
+check($authenticated instanceof WP_User && Receiver::permission(),'WordPress application-password authentication authorizes receiver');
+unset($applicationPassword);
+foreach(['media/../../escape.php','/etc/passwd','fonts/test.php','media/foo%2f..png'] as $path){fails(fn()=>Receiver::assetName($path),'Reject unsafe asset '.$path);}
+check(Receiver::prepare(req($payload))['status']==='receiving','Prepare journal');
+check(Receiver::prepare(req($payload))['status']==='receiving','Identical prepare idempotent');
+$changed=$payload;$changed['manifest']['options']['blogname']='Changed';fails(fn()=>Receiver::prepare(req($changed)),'Operation cannot change payload');
+fails(fn()=>Receiver::asset(req($payload+['name'=>'media/test.png','bytes'=>base64_encode('corrupt')])),'Corrupt upload rejected');
+uploadTestAsset($payload);
+$result=Receiver::execute(req($payload));$site=(int)$result['link']['site'];
+check($result['operation']['status']==='complete','Initial publication complete');
+check(!Preview::enabled($site),'Publication does not silently enable a preview code');
+$preview=Receiver::manage(req(['source'=>$source,'action'=>'preview_generate','confirm'=>'Test klant']));$previewPolicy=get_site_meta($site,'emsf_preview',true);
+check(strlen($preview['preview']['code'])===4 && $preview['link']['preview_enabled'],'Explicit preview generation returns code and safe enabled status');
+check(get_site_meta($site,'emsf_mail_mode',true)==='off','New published demo starts with email off');
+check((int)get_sites(['count'=>true])===2,'Exactly one new subsite');
+check(Receiver::execute(req($payload))['link']['site']===$site,'Repeat execute returns same site');
+check((int)get_sites(['count'=>true])===2,'Retry does not duplicate site');
+switch_to_blog($site);
+$home=(int)get_option('page_on_front');check(get_post($home)->post_title==='Home','Page/reference import');
+check(str_contains(get_post($home)->post_content,'https://online.example.test/klant/contact/'),'Subfolder URL mapping');
+check(str_starts_with(wp_upload_dir()['basedir'],EMSF_STATE_DIR.'/uploads/'),'Media outside document root');
+$media=(int)get_post_meta($home,'_thumbnail_id',true);check(get_post_type($media)==='attachment' && is_file(get_attached_file($media)),'Attachment ID and file remapped');
+check(str_contains(get_post($home)->post_content,'/klant/projects/example/'),'Custom model permalink translated using ACF rewrite settings');
+check(str_contains(wp_get_attachment_url($media),'/klant/emsf-media/'),'Protected media URL generated');
+$menu=get_nav_menu_locations()['primary'];check((int)wp_get_nav_menu_items($menu)[0]->object_id===$home,'Menu object reference and location remapped');
+check(count(wp_get_object_terms($home,'category'))===1,'Taxonomy relationship remapped');
+$customer=(int)get_site_meta($site,'emsf_customer_id',true);
+check(get_userdata($customer)->user_login==='first_customer' && is_user_member_of_blog($customer,$site),'Selected customer automatically provisioned');
+check(!is_user_member_of_blog($customer,get_main_site_id()),'No customer membership on main site');
+$beforePass=get_userdata($customer)->user_pass;
+wp_update_post(['ID'=>$home,'post_title'=>'Online bewerkt']);$extra=wp_insert_post(['post_title'=>'Online extra','post_type'=>'page','post_status'=>'publish']);
+update_option('options_skeletor_theme_options_roles',['editor']);
+restore_current_blog();
+wp_set_current_user($customer);check(!Receiver::permission(),'Customer cannot publish through receiver');switch_to_blog($site);check(Privacy::member(),'Customer can access own site');restore_current_blog();check(!is_super_admin(),'Customer not network administrator');wp_set_current_user(1);
+$other=wp_insert_site(['domain'=>get_network()->domain,'path'=>'/other/','user_id'=>1,'title'=>'Other']);
+switch_to_blog($other);update_option('blogdescription','Do not touch');check(!is_user_member_of_blog($customer,$other),'Customer has no other-site membership');restore_current_blog();
+$failedBackup=$payload;$failedBackup['operation']=wp_generate_uuid4();$failedBackup['action']='replace';$failedBackup['confirm']='Test klant';$failedBackup['expected_revision']=ContentChanges::status($site)['token'];$failedBackup['replace_changes']=true;
+$blockedMedia=Store::root().'/uploads/'.$site.'/blocked.txt';symlink(__FILE__,$blockedMedia);
+Receiver::prepare(req($failedBackup));uploadTestAsset($failedBackup);
+fails(fn()=>Receiver::execute(req($failedBackup)),'Backup failure prevents overwrite');
+check((int)get_blog_option($site,'page_on_front')===$home,'Backup failure leaves original front page');
+check(get_site_meta($site,'emsf_state',true)==='ready','Backup failure reopens unchanged existing site');
+unlink($blockedMedia);
+Receiver::manage(req(['source'=>$source,'action'=>'cancel','confirm'=>'Test klant','operation'=>$failedBackup['operation']]));
+check(Store::read('op-'.$failedBackup['operation'])['status']==='cancelled','Failed preparation can be cancelled without replacement');
+Receiver::manage(req(['source'=>$source,'action'=>'mail','confirm'=>'Test klant','mail_mode'=>'on']));
+check(get_site_meta($site,'emsf_mail_mode',true)==='on','Explicit online per-site mail switch');
+$replace=$payload;$replace['operation']=wp_generate_uuid4();$replace['action']='replace';$replace['confirm']='Wrong';$replace['expected_revision']=ContentChanges::status($site)['token'];$replace['replace_changes']=true;Receiver::prepare(req($replace));uploadTestAsset($replace);fails(fn()=>Receiver::execute(req($replace)),'Wrong confirmation rejected');
+$replace['operation']=wp_generate_uuid4();$replace['confirm']='Test klant';Receiver::prepare(req($replace));uploadTestAsset($replace);$replaced=Receiver::execute(req($replace));
+check(!empty($replaced['operation']['backup']),'Backup created before replacement');
+check(get_site_meta($site,'emsf_mail_mode',true)==='on','Repush preserves online mail setting');
+check(get_site_meta($site,'emsf_preview',true)===$previewPolicy,'Repush preserves preview code policy');
+switch_to_blog($site);$newHome=(int)get_option('page_on_front');check(get_post($newHome)->post_title==='Home','Local content replaces online edit');check(!get_post($extra),'Online-only page removed');check(get_option('options_skeletor_theme_options_roles')===['editor'],'Layout access preserved');restore_current_blog();
+check(get_userdata($customer)->user_pass===$beforePass && is_user_member_of_blog($customer,$site),'Customer password and membership preserved');check(get_blog_option($other,'blogdescription')==='Do not touch','Other site untouched');
+$managed=['source'=>$source,'confirm'=>'Test klant'];
+$backupFile=Store::root().'/'.$replaced['operation']['backup'].'/uploads/site-factory/media/test.png';
+$original=file_get_contents($backupFile);file_put_contents($backupFile,'corrupt');
+fails(fn()=>Receiver::manage(req($managed+['action'=>'restore','operation'=>$replace['operation']])),'Corrupt recovery asset rejected');
+check(get_site_meta($site,'emsf_state',true)==='restoring','Failed restore remains closed');
+file_put_contents($backupFile,$original);
+Receiver::manage(req($managed+['action'=>'restore','operation'=>$replace['operation']]));
+switch_to_blog($site);check(get_post($home)->post_title==='Online bewerkt' && get_post($extra)->post_title==='Online extra','Snapshot restores online edits and deleted content');restore_current_blog();
+check(get_userdata($customer)->user_pass===$beforePass,'Restore leaves network credentials untouched');
+check(get_site_meta($site,'emsf_preview',true)===$previewPolicy,'Restore preserves preview code policy');
+// Force a real write-time failure: unresolved text token is discovered after clearing inside the transaction.
+$broken=$replace;$broken['operation']=wp_generate_uuid4();$broken['manifest']['posts'][0]['post']['post_content']='{{emsf:missing}}';Receiver::prepare(req($broken));uploadTestAsset($broken);fails(fn()=>Receiver::execute(req($broken)),'Mid-import error fails closed');check(get_site_meta($site,'emsf_state',true)==='failed','Failed site remains inaccessible');
+switch_to_blog($site);check(get_post($home)->post_title==='Online bewerkt','Database transaction rolled back');restore_current_blog();
+fails(fn()=>Receiver::execute(req($broken)),'Failed operation never replays automatically');
+Receiver::manage(req($managed+['action'=>'restore','operation'=>$broken['operation']]));check(get_site_meta($site,'emsf_state',true)==='ready','Explicit recovery opens site again');
+Receiver::manage(req($managed+['action'=>'archive']));check(get_site_meta($site,'emsf_state',true)==='archived','Archive state persisted');
+wp_set_current_user($customer);switch_to_blog($site);check(Privacy::unavailable(),'Archived site closed for customer');restore_current_blog();wp_set_current_user(1);
+Receiver::manage(req($managed+['action'=>'unarchive']));check(get_site_meta($site,'emsf_state',true)==='ready','Unarchive');
+fails(fn()=>Receiver::manage(req($managed+['action'=>'delete','delete_confirm'=>'DEFINITIEF VERWIJDEREN'])),'Deleting active site rejected');
+$collision=$payload;$collision['source']=wp_generate_uuid4();$collision['operation']=wp_generate_uuid4();$collision['manifest']['prospect']['uuid']=$collision['source'];Receiver::prepare(req($collision));uploadTestAsset($collision);fails(fn()=>Receiver::execute(req($collision)),'Existing address never adopted');
+// Unknown metadata dependencies must stop before any target is created.
+$unsupported=$collision;$unsupported['operation']=wp_generate_uuid4();$unsupported['slug']='unsupported';$unsupported['manifest']['unsupported']=['Unknown table'];fails(fn()=>Receiver::prepare(req($unsupported)),'Unsupported content blocked before upload');check(!domain_exists(get_network()->domain,'/unsupported/',get_current_network_id()),'No partial site for unsupported content');
+
+check(empty($GLOBALS['test_mail_count']),'No invitation sent as part of publication');
+$access=Receiver::manage(req($managed+['action'=>'setup_link']))['customer'];
+parse_str((string)parse_url($access['setup_url'],PHP_URL_QUERY),$reset);
+check(check_password_reset_key($reset['key'],$reset['login']) instanceof WP_User,'Manual setup link is a valid WordPress reset link');
+check(strtotime($access['expires_at'])<=time()+DAY_IN_SECONDS,'Setup link expires within one day');
+check(empty($GLOBALS['test_mail_count']),'Setup link generation sends no mail');
+$second=Receiver::manage(req($managed+['action'=>'setup_link']))['customer'];
+check(is_wp_error(check_password_reset_key($reset['key'],$reset['login'])),'Regenerating invalidates previous setup link');
+check(get_userdata($customer)->user_pass===$beforePass,'Generating link does not change password');
+do_action('after_password_reset',get_userdata($customer));
+fails(fn()=>Receiver::manage(req($managed+['action'=>'setup_link'])),'Already-used customer account never reset automatically');
+fails(fn()=>Receiver::manage(req($managed+['action'=>'invite','email'=>'no-mail@example.invalid'])),'Old automatic invite route disabled');
+Receiver::manage(req($managed+['action'=>'archive']));fails(fn()=>Receiver::manage(req($managed+['action'=>'delete','delete_confirm'=>'yes'])),'Second deletion confirmation required');Receiver::manage(req($managed+['action'=>'delete','delete_confirm'=>'DEFINITIEF VERWIJDEREN']));check(!get_site($site),'Disposable site deleted');check((bool)get_userdata($customer),'Delete preserves network users');check((bool)get_site($other),'Delete preserves other subsite');
+echo "TOTAL: $checks assertions passed.\n";

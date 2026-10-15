@@ -1,0 +1,85 @@
+<?php
+use Emonks\Factory\Factory;
+use Emonks\Factory\Online\{Accounts,Admin,Sites,Store};
+if(getenv('EMSF_DISPOSABLE_TEST')!=='yes'||!str_contains(ABSPATH,'emsf-integration')){throw new RuntimeException('Disposable test only.');}
+global $nchecks;$nchecks=0;
+function verify($value,$label){global $nchecks;if(!$value){throw new RuntimeException('FAIL: '.$label);}++$nchecks;echo "PASS: $label\n";}
+function denied(callable $fn,$label){try{$fn();}catch(Throwable $e){verify(true,$label);return;}throw new RuntimeException('Expected rejection: '.$label);}
+wp_set_current_user(1);
+// Prove mail guards independently of local-mode and Privacy guards, including hostile notification hooks.
+remove_all_filters('pre_wp_mail');
+$attempts=0;$unguarded=0;
+$spy=static function($pre)use(&$attempts,&$unguarded){$attempts++;if($pre!==false){$unguarded++;}return false;};
+add_filter('wp_mail',static function($args)use($spy){remove_filter('pre_wp_mail',$spy,PHP_INT_MAX);add_filter('pre_wp_mail',$spy,PHP_INT_MAX);return $args;});
+add_action('user_register',static fn()=>wp_mail('never@example.invalid','Hook notification','Blocked test message'));
+add_action('wpmu_new_user',static fn()=>wp_mail('never@example.invalid','Network hook notification','Blocked test message'));
+add_action('retrieve_password_key',static fn()=>wp_mail('never@example.invalid','Key hook notification','Blocked test message'));
+$remote=wp_insert_site(['domain'=>get_network()->domain,'path'=>'/silent-account/','user_id'=>1,'title'=>'Silent account','meta'=>['emsf_managed'=>1,'emsf_state'=>'ready','emsf_source'=>'silent-test']]);
+$chosen=Accounts::validate(['name'=>'Chosen Customer','username'=>'chosen_customer','email'=>'chosen@example.invalid','confirmed'=>true]);
+$details=Accounts::provision($remote,'silent-test',$chosen);
+verify($details['username']==='chosen_customer'&&$details['email']==='chosen@example.invalid','Only explicitly chosen customer is provisioned');
+verify($attempts>=2&&$unguarded===0,'user_register and network hooks cannot send mail');
+$access=Accounts::setupLink($remote);parse_str(parse_url($access['setup_url'],PHP_URL_QUERY),$key);
+verify($attempts>=3&&$unguarded===0,'Reset-key hooks cannot send mail');
+verify(check_password_reset_key($key['key'],$key['login']) instanceof WP_User,'Link works without sending mail');
+$secretsAbsent=true;foreach(glob(Store::root().'/*.json')as$file){$secretsAbsent=$secretsAbsent&&!str_contains(file_get_contents($file),$key['key']);}verify($secretsAbsent,'Secret setup key absent from all operation journals');
+$uid=(int)get_site_meta($remote,'emsf_customer_id',true);$user=get_userdata($uid);$hash=$user->user_activation_key;$pass=$user->user_pass;
+$beforeMail=$attempts;wp_new_user_notification($uid,null,'both');verify($attempts===$beforeMail,'Deferred standard WordPress welcome notifications are also disabled');
+Accounts::provision($remote,'silent-test',$chosen);
+verify(get_userdata($uid)->user_pass===$pass&&get_userdata($uid)->user_activation_key===$hash,'Retry preserves existing password and reset key');
+denied(fn()=>Accounts::available($chosen),'Existing network account is never silently adopted');
+denied(fn()=>Accounts::validate(['name'=>'Someone','username'=>'someone','email'=>'','confirmed'=>true]),'Missing email blocks publication');
+denied(fn()=>Accounts::validate(['name'=>'Someone','username'=>'someone','email'=>'person@example.invalid']),'Unconfirmed identity blocks publication');
+// Native Sites controls in local context, with no connection configured.
+define('EMSF_LOCAL',true);register_post_type(Factory::TYPE,['public'=>false]);
+$remoteCalls=0;add_filter('pre_http_request',static function($pre,$args,$url)use(&$remoteCalls){if(str_contains($url,'/wp-json/emsf/')){$remoteCalls++;}return new WP_Error('offline','Test transport blocked');},PHP_INT_MAX,3);
+$one=Sites::createLocal(['name'=>'Local choice one','slug'=>'local-choice-one']);
+$two=Sites::createLocal(['name'=>'Local choice two','slug'=>'local-choice-two']);
+verify($one['site_id']!==$two['site_id']&&$remoteCalls===0,'Creating multiple local concepts never publishes any');
+$id=(int)$one['site_id'];$other=(int)$two['site_id'];
+$actions=apply_filters('manage_sites_action_links',['archive'=>'old','delete'=>'old','edit'=>'Core edit','visit'=>'Core visit','backend'=>'Core dashboard'],$id);
+verify(isset($actions['emsf'],$actions['visit'],$actions['backend'])&&!isset($actions['archive'],$actions['delete']),'Native Sites rows have scoped controls');
+verify($actions['edit']==='Core edit'&&$actions['visit']==='Core visit'&&count(array_filter(array_keys($actions),static fn($key)=>str_starts_with($key,'emsf')))===1,'Native row retains WordPress actions with only one Factory link');
+$bulk=apply_filters('bulk_actions-sites-network',['delete'=>'Delete','archive'=>'Archive','x'=>'Custom']);
+verify(!isset($bulk['delete'],$bulk['archive'],$bulk['publish'])&&isset($bulk['x']),'No bulk publication or unconfirmed bulk deletion');
+$_GET=['id'=>$id];ob_start();Admin::page();$html=ob_get_clean();
+verify(str_contains($html,'name="site_id" value="'.$id.'"')&&!str_contains($html,'Local choice two'),'Confirmation screen targets exactly one chosen site');
+verify(!str_contains($html,'customer_email')&&str_contains($html,'Online verbinding nog niet ingesteld'),'Disconnected state hides premature customer form');
+define('EMSF_REMOTE_URL','https://online.example.test');
+ob_start();Admin::page();$html=ob_get_clean();
+verify(str_contains($html,'name="customer_email" value=""')||preg_match('/name="customer_email" value=""/',$html),'Customer email is blank rather than invented');
+verify(str_contains($html,'automatisch')&&str_contains($html,'subsite')&&str_contains($html,'id="publicatie"')&&str_contains($html,'id="email"')&&str_contains($html,'id="beheer"'),'Factory screen explains automatic site creation and separates work sections');
+verify(!str_contains($html,'test@example.invalid'),'Network admin email never used as customer suggestion');
+verify(str_contains($html,'customer_confirmed')&&str_contains($html,'geen e-mail'),'Explicit recipient confirmation and no-mail message visible');
+$native=['blogname'=>'URL','lastupdated'=>'Last Updated','registered'=>'Registered','users'=>'Users'];
+verify(apply_filters('manage_sites-network_columns',$native)===$native,'Native WordPress Sites columns remain unchanged');
+Store::write('remote-'.$one['uuid'],['site'=>$remote,'url'=>'https://online.example.test/silent-account/','name'=>'Silent account','preview_enabled'=>true,'state'=>'ready','mail_mode'=>'off']);
+ob_start();Admin::page();$linkedHtml=ob_get_clean();
+verify(str_contains($linkedHtml,'preview_generate')&&str_contains($linkedHtml,'preview_revoke')&&str_contains($linkedHtml,'setup_link')&&str_contains($linkedHtml,'Online inhoud bijwerken'),'Linked Factory screen exposes separate preview, account and replacement actions');
+$_GET['tab']='activiteit';ob_start();Admin::page();$tabs=ob_get_clean();
+verify(str_contains($tabs,'id="activiteit" role="tabpanel" aria-labelledby="emsf-tab-activiteit" tabindex="-1">')&&str_contains($tabs,'id="publicatie" role="tabpanel" aria-labelledby="emsf-tab-publicatie" tabindex="-1" hidden'),'Selected activity tab is visible while publication is hidden');
+verify(str_contains($tabs,'name="return_tab" value="activiteit"')&&str_contains($tabs,'name="activity_recipient" value=""'),'Forms preserve active tab and notification recipient starts blank');
+unset($_GET['tab']);
+$dieHandler=static fn()=>static function(){throw new RuntimeException('Nonce rejected');};
+add_filter('wp_die_handler',$dieHandler,PHP_INT_MAX);
+$_POST=['site_id'=>$id,'scope'=>'local','site_action'=>'archive','confirm'=>'Local choice one'];$_REQUEST=[];
+denied(fn()=>Admin::submit(),'Missing nonce cannot execute a site action');
+remove_filter('wp_die_handler',$dieHandler,PHP_INT_MAX);$_POST=[];
+verify(!get_site($id)->archived,'Rejected forged submission leaves site unchanged');
+Admin::run($id,['scope'=>'local','site_action'=>'archive','confirm'=>'Local choice one']);
+verify((bool)get_site($id)->archived&&!get_site($other)->archived&&$remoteCalls===0,'Archiving selected local site leaves other local and remote sites untouched');
+denied(fn()=>Admin::run($id,['scope'=>'online','site_action'=>'create']),'Archived local concept cannot publish');
+Admin::run($id,['scope'=>'local','site_action'=>'unarchive','confirm'=>'Local choice one']);
+verify(!get_site($id)->archived,'Local unarchive works');
+denied(fn()=>Admin::run($id,['scope'=>'local','site_action'=>'delete','confirm'=>'Wrong']),'Wrong site confirmation rejected');
+wp_set_current_user($uid);
+denied(fn()=>Admin::run($id,['scope'=>'local','site_action'=>'archive','confirm'=>'Local choice one']),'Customer cannot run network site actions');
+verify(!isset(Sites::rows([],$id)['emsf']),'Customer has no Factory row actions');
+wp_set_current_user(1);
+// Stop before irreversible action unless all per-site conditions and local backup are satisfied.
+Admin::run($id,['scope'=>'local','site_action'=>'archive','confirm'=>'Local choice one']);
+denied(fn()=>Admin::run($id,['scope'=>'local','site_action'=>'delete','confirm'=>'Local choice one','delete_confirm'=>'DEFINITIEF VERWIJDEREN']),'Online deletion phrase does not authorize local deletion');
+Admin::run($id,['scope'=>'local','site_action'=>'delete','confirm'=>'Local choice one','delete_confirm'=>'DEFINITIEF LOKAAL VERWIJDEREN']);
+verify(!get_site($id)&&get_site($other)&&get_site($remote)&&$remoteCalls===0,'Confirmed local deletion affects only selected disposable local site');
+verify(!empty(Store::read('local-deleted-'.$one['uuid'])['backup']),'Local deletion writes a verified recovery backup');
+echo "TOTAL: $nchecks assertions passed; all mail transports intercepted.\n";
