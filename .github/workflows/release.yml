@@ -1,0 +1,25 @@
+name: Publish WordPress release
+on:
+  push:
+    tags: ['v[0-9]*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PHP syntax
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/check-release.py "$RELEASE_TAG"
+      - name: Run updater configuration tests
+        run: php tests/update-policy.php
+      - name: Build installable plugin
+        run: python3 scripts/build-zip.py
+      - name: Publish stable release and installation ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

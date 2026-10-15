@@ -1,6 +1,6 @@
 # Emonks Site Factory
 
-WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.13.1 — hostingpilot vereist**.
+WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.14.0 — hostingpilot vereist**.
 
 Beheer via **Netwerkbeheer → Site Factory → Alle sites**: lokaal concept aanmaken, per site publiceren/vervangen, klanttoegang handmatig delen, e-mail uit/aan, archiveren en herstellen. Geen bulkpublicatie. Nieuwe voorstellen starten met e-mail uit. Accountaanmaak/publicatie versturen geen WordPress-mail, ook wanneer normale site-mail is aangezet.
 
@@ -10,7 +10,7 @@ Nieuw in 0.4: viertekens-previewcodes met raadlimiet, unieke deellinks die de co
 
 1. Gebruik PHP 8.1 of nieuwer, WordPress Multisite, InnoDB en een schrijfbare persistente private opslagmap buiten alle webroots.
 2. Installeer het eigen **Skeletor-thema** en **ACF Pro** afzonderlijk. Dezelfde Skeletor-versie en gecontroleerde themabestanden moeten op beide netwerken staan. ACF- en Fluent Forms-versienummers hoeven niet gelijk te zijn; de benodigde plugins moeten wel beschikbaar zijn. Installeer Fluent Forms netwerkbreed wanneer de inhoud formulieren bevat; Pro en licenties alleen wanneer nodig. Deze afhankelijkheden worden niet meegeleverd.
-3. Bouw de installeerbare zip met `python3 scripts/build-zip.py`. Upload `dist/emonks-site-factory-0.13.1.zip` via Netwerkbeheer → Plugins en activeer netwerkbreed. Of plaats de repository-root als `wp-content/plugins/emonks-site-factory`.
+3. Bouw de installeerbare zip met `python3 scripts/build-zip.py`. Upload `dist/emonks-site-factory-0.14.0.zip` via Netwerkbeheer → Plugins en activeer netwerkbreed. Of plaats de repository-root als `wp-content/plugins/emonks-site-factory`.
 4. Configureer uitsluitend de passende modus in `wp-config.php`, vóór WordPress wordt geladen. Bewaar configuratie, opslag en credentials buiten Git. Zie [installatie, privacy en hostingcontroles](docs/ONLINE.md).
 5. Lokaal: open Sites. Online: verbind pas na hostingcontroles en doe eerst een wegwerppilot. Openbare voorstellen blijven een voorstelomgeving, geen live-klantsitemodus.
 
@@ -206,3 +206,25 @@ Vóór vervanging wordt de bestaande software gekopieerd naar de private opslag,
 ## Controle zonder voortijdige inhoudsexport (0.13.1)
 
 Alles controleren haalt eerst de omgevingsgegevens op. Bij een ongeschikt of verouderd online netwerk wordt nog geen inhoudspakket samengesteld; de resultaten en updateopties verschijnen meteen. Pas bij geslaagde omgevingscontroles wordt inhoud en media gecontroleerd. Controle en publicatie vragen de standaard WordPress-geheugenlimiet voor beheer aan. Een onderbroken controle meldt dat er geen publicatie gestart is. Dit verhelpt de lokale geheugenfout bij Volksuniversiteit (9 oktober 2026, 128 MiB tijdens opties-export).
+
+## Updates via WordPress en GitHub Releases
+
+Vanaf 0.14.0 controleert de ingebouwde Plugin Update Checker 5.7 op stabiele releases in [jeffreypisa/emonks-sitefactory](https://github.com/jeffreypisa/emonks-sitefactory). De repository is openbaar; er is geen token of extra updaterplugin nodig. WordPress toont updates op de pluginpagina en bij Dashboard → Updates. Bij Multisite werk je plugins bij via Netwerkbeheer. Automatische updates worden niet ongevraagd ingeschakeld.
+
+Installeer deze eerste versie met updater één keer handmatig met `dist/emonks-site-factory-0.14.0.zip`. Eerdere versies herkennen GitHub-updates nog niet. Behoud het hoofdbestand `emonks-site-factory.php` en vervang dezelfde bestaande plugin; activeer geen tweede kopie ernaast. De updater behoudt bij volgende updates de bestaande pluginmap, ook als die van de repositorynaam afwijkt.
+
+Nieuwe releases maken:
+
+1. Verhoog het versienummer in de pluginheader; werk de wijzigingsnotities bij en voer `php tests/update-policy.php` en de overige relevante tests uit.
+2. Commit en push de wijziging. Maak daarna een tag `vX.Y.Z` die exact bij het pluginversienummer hoort en push die tag.
+3. De GitHub Actions-workflow `Publish WordPress release` controleert de tag, test de updater en bouwt/publiceert het installatiebestand als GitHub Release. Bekijk of de workflow geslaagd is. Ontbreekt een release of de bijbehorende installatie-zip, dan verschijnt geen update in WordPress.
+
+De updater gebruikt uitsluitend gepubliceerde stabiele releases met een passende installatie-zip. Een gewone branchpush, een losse tag, een conceptrelease, een prerelease of de automatisch gegenereerde GitHub-broncode-zip wordt niet als update gebruikt. WordPress controleert periodiek; via de extra link voor updatecontrole op de pluginpagina kun je eerder controleren. GitHub-storingen en API-limieten kunnen de controle tijdelijk verhinderen.
+
+De MIT-licentie en bronbestanden van Plugin Update Checker staan onder `includes/plugin-update-checker`. Bewerk die externe bibliotheek niet handmatig; vervang haar bij een toekomstige bibliotheekupdate door een gecontroleerde officiële uitgave.
+
+## GitHub-updates (0.14.0)
+
+Updater toegevoegd voor de gewone WordPress-pluginpagina, naast de bestaande lokale softwareoverdracht. De lokale integratieblokkering laat uitsluitend leesverzoeken naar de update-endpoints van emonks Dashboard en Site Factory door. De releaseworkflow levert een runtimepakket met de updaterbibliotheek en haar licentie.
+
+Gebruik de Git-repository als ontwikkelbron. Installeer de release-zip op de WordPress-omgevingen die je via de pluginpagina wilt bijwerken; een WordPress-update vervangt de pluginmap en kan daardoor een daarin aanwezige `.git`-map verwijderen.

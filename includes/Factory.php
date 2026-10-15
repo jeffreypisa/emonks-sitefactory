@@ -28,11 +28,25 @@ final class Factory {
             // Keep official update checks and package downloads available without
             // opening outbound requests for demo forms or third-party integrations.
             if (wp_parse_url($url,PHP_URL_SCHEME)==='https' && in_array($host,['api.wordpress.org','downloads.wordpress.org'],true)) { return $pre; }
+            if (self::pluginUpdateRequest($url, $args)) { return $pre; }
             if (in_array($host,['fonts.googleapis.com','fonts.gstatic.com','fonts.google.com'],true)) { return $pre; }
             if (is_string($host) && ($host==='sites.test'||str_ends_with($host,'.sites.test'))) { return $pre; }
             return new \WP_Error('emsf_local_only','Externe verzoeken uitgeschakeld in lokale demo’s.');
         },999,3);
     }
+    /** Only public update metadata and installation ZIPs for the two emonks plugins. */
+    public static function pluginUpdateRequest(string $url, array $args = []): bool {
+        if (!in_array(strtoupper($args['method'] ?? 'GET'), ['GET', 'HEAD'], true)) return false;
+        $parts = wp_parse_url($url);
+        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && $parts['port'] !== 443)) return false;
+        $host = $parts['host'] ?? '';
+        $path = $parts['path'] ?? '';
+        $repo = '(?:emonks-dashboard|emonks-sitefactory)';
+        if ($host === 'api.github.com') return (bool) preg_match('~^/repos/jeffreypisa/' . $repo . '/(?:releases(?:/latest|/assets/[0-9]+)?|contents/[^\\?#]+|commits/[^/]+)$~D', $path);
+        if ($host === 'github.com') return (bool) preg_match('~^/jeffreypisa/' . $repo . '/releases/download/v[0-9]+\.[0-9]+\.[0-9]+/(?:emonks-dashboard|emonks-site-factory)-[0-9]+\.[0-9]+\.[0-9]+\.zip$~D', $path);
+        return false;
+    }
+
     public static function local(): void {
         if (!defined('EMSF_LOCAL')||!EMSF_LOCAL||wp_get_environment_type()!=='local'||!is_multisite()) { throw new \RuntimeException('Alleen beschikbaar in het lokale Factory-netwerk.'); }
         if (!current_user_can('manage_network')) { throw new \RuntimeException('Netwerkbeheerder vereist. Gebruik --user=emonks.'); }

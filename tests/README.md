@@ -96,3 +96,7 @@ Aanvullend acht echte HTTP-verzoeken tegen een geïsoleerde localhost-WordPress-
 ## Software bijwerken (0.13.0)
 
 `php tests/software-update.php` werkt uitsluitend in tijdelijke mappen, zonder WordPress-database of HTTP-transport. Test pakketinhoud, padbeveiliging, versiecontrole, uploadvolgorde, bronbinding, onvolledige upload, gewijzigde online versie, herstelkopie, geslaagde installatie en herstel bij een installatiefout. De WordPress-installer is hierbij gesimuleerd. De echte hostinginstallatie, netwerkactivatie, bestandstoegang en een update van de draaiende plugin blijven onderdeel van de online pilot.
+
+## Openbare pluginupdates (0.14.0)
+
+`php tests/update-policy.php` test zonder database of netwerk stabiele releases, concepten/prereleases, ontbrekende/verkeerde assets, netwerkfouten en de gerichte uitzondering voor GitHub-leesverzoeken in lokale demo’s. `wp eval-file tests/updater-wordpress.php` controleert de echte updater binnen WordPress met onderschept HTTP-verkeer en tijdelijke updatebestanden.

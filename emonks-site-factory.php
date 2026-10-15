@@ -2,13 +2,15 @@
 /**
  * Plugin Name: Emonks Site Factory
  * Description: Lokale prospectsites met Skeletor, geïsoleerde projectmodellen en overdraagbare inhoud.
- * Version: 0.13.1
+ * Version: 0.14.0
+ * Update URI: https://github.com/jeffreypisa/emonks-sitefactory
  * Network: true
  * Requires PHP: 8.1
  */
 declare(strict_types=1);
 namespace Emonks\Factory;
 if (!defined('ABSPATH')) { exit; }
+(require __DIR__ . '/includes/Updater.php')(__FILE__);
 require_once __DIR__.'/includes/Factory.php';
 require_once __DIR__.'/includes/Package.php';
 require_once __DIR__.'/includes/ThemeRelease.php';
