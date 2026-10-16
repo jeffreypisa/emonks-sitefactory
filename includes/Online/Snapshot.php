@@ -27,6 +27,7 @@ final class Snapshot {
     }
     public static function create(): string {
         global $wpdb;
+        if (function_exists('wp_raise_memory_limit')) { wp_raise_memory_limit('admin'); }
         $tables = self::tables();
         $id = 'backup-'.get_current_blog_id().'-'.wp_generate_uuid4();
         $backup = ['site'=>get_current_blog_id(), 'created'=>gmdate('c'), 'tables'=>[], 'files'=>[]];
@@ -43,8 +44,7 @@ final class Snapshot {
             foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(Store::root().'/'.$id, \FilesystemIterator::SKIP_DOTS)) as $file) {
                 if ($file->isFile()) { $backup['files'][substr($file->getPathname(), strlen(Store::root().'/'.$id.'/'))] = hash_file('sha256', $file->getPathname()); }
             }
-            Store::write($id, $backup);
-            if (Store::read($id) !== $backup) { throw new \RuntimeException('Snapshot teruglezen mislukt.'); }
+            Store::write($id, $backup, true);
         } finally { $wpdb->query('ROLLBACK'); }
         return $id;
     }

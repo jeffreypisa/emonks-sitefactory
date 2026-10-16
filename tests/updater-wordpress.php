@@ -34,7 +34,7 @@ $temp = get_temp_dir() . 'emonks-updater-' . wp_generate_uuid4();
 try {
     $checker = null;
     global $wp_filter;
-    foreach (($wp_filter['upgrader_source_selection']->callbacks ?? []) as $callbacks) {
+    foreach (($wp_filter['puc_is_slug_in_use-' . $repo]->callbacks ?? []) as $callbacks) {
         foreach ($callbacks as $entry) {
             $callback = $entry['function'];
             if (is_array($callback) && is_object($callback[0]) && ($callback[0]->slug ?? null) === $repo) $checker = $callback[0];
@@ -43,7 +43,18 @@ try {
     if (!$checker) $checker = (require $root . '/includes/Updater.php')($root . '/' . $main);
     $expect($checker->pluginFile === plugin_basename($root . '/' . $main), 'Plugin identity changed.');
     $expect($checker->directoryName === dirname(plugin_basename($root . '/' . $main)), 'Installation directory is not preserved.');
-    if (is_dir($root . '/.git')) {
+    if (file_exists($root . '/.git')) {
+        $expect($checker->scheduler->checkPeriod === 0, 'Git checkout still schedules update requests.');
+        $expect(!wp_next_scheduled($checker->scheduler->getCronHookName()), 'Old update cron was not removed.');
+        $expect(!has_filter('site_transient_update_plugins', [$checker, 'injectUpdate']), 'Git updater hooks remain active.');
+        foreach (['admin_init', 'plugin_row_meta', 'all_admin_notices'] as $hook) {
+            foreach (($wp_filter[$hook]->callbacks ?? []) as $callbacks) {
+                foreach ($callbacks as $entry) {
+                    $callback = $entry['function'];
+                    $expect(!(is_array($callback) && $callback[0] instanceof \YahnisElsts\PluginUpdateChecker\v5p7\Plugin\Ui), 'Local updater UI remains active.');
+                }
+            }
+        }
         $expect(apply_filters($checker->getUniqueName('pre_inject_update'), (object) ['version' => '9.8.7']) === null, 'Git checkout still receives WordPress update offers.');
         $expect(apply_filters('auto_update_plugin', true, (object) ['plugin' => $checker->pluginFile]) === false, 'Git checkout can be automatically replaced.');
         $expect(apply_filters('auto_update_plugin', true, (object) ['plugin' => 'unrelated/plugin.php']) === true, 'Another plugin has been affected.');

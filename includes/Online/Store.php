@@ -22,14 +22,25 @@ final class Store {
         $path = self::root().'/'.self::key($key).'.json';
         return is_file($path) ? json_decode((string)file_get_contents($path), true, 512, JSON_THROW_ON_ERROR) : [];
     }
-    public static function write(string $key, array $value): void {
+    public static function write(string $key, array $value, bool $verify = false): void {
         $path = self::root().'/'.self::key($key).'.json';
+        $json = json_encode($value, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
         $temp = tempnam(self::root(), '.journal-');
-        if (!$temp || file_put_contents($temp, json_encode($value, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT), LOCK_EX) === false || !rename($temp, $path)) {
-            throw new \RuntimeException('Journal opslaan mislukt; stop en controleer opslag.');
-        }
-        chmod($path, 0600);
+        if (!$temp) { throw new \RuntimeException('Journal opslaan mislukt; stop en controleer opslag.'); }
+        try {
+            if (file_put_contents($temp, $json, LOCK_EX) !== strlen($json)) {
+                throw new \RuntimeException('Journal opslaan mislukt; stop en controleer opslag.');
+            }
+            // Verify exact stored bytes without allocating a second decoded database snapshot.
+            if ($verify && !hash_equals(hash('sha256', $json), (string)hash_file('sha256', $temp))) {
+                throw new \RuntimeException('Snapshot teruglezen mislukt.');
+            }
+            if (!chmod($temp, 0600) || !rename($temp, $path)) {
+                throw new \RuntimeException('Journal opslaan mislukt; stop en controleer opslag.');
+            }
+        } finally { if (is_file($temp)) { unlink($temp); } }
     }
+
     public static function locked(string $key, callable $fn) {
         $handle = fopen(self::root().'/'.self::key($key).'.lock', 'c');
         if (!$handle || !flock($handle, LOCK_EX | LOCK_NB)) { throw new \RuntimeException('Er draait al een bewerking. Controleer de status.'); }

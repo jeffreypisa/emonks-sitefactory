@@ -100,3 +100,7 @@ Aanvullend acht echte HTTP-verzoeken tegen een geïsoleerde localhost-WordPress-
 ## Openbare pluginupdates (0.14.0)
 
 `php tests/update-policy.php` test zonder database of netwerk stabiele releases, concepten/prereleases, ontbrekende/verkeerde assets, netwerkfouten en de gerichte uitzondering voor GitHub-leesverzoeken in lokale demo’s. `wp eval-file tests/updater-wordpress.php` controleert de echte updater binnen WordPress met onderschept HTTP-verkeer en tijdelijke updatebestanden.
+
+## Geheugenpiek herstelkopie (0.14.2)
+
+`php tests/snapshot-memory.php` maakt uitsluitend tijdelijke fictieve bestanden en een gesimuleerde database met 80.000 rijen bij 128 MiB. Controleert behoud van inhoud, privébestandsrechten, transactie-afsluiting en opruimen van tijdelijke journals. De oude dubbele JSON-inlezing overschrijdt deze limiet; de nieuwe bestandscontrole blijft eronder. Er worden geen echte sites verwijderd.

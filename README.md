@@ -1,6 +1,6 @@
 # Emonks Site Factory
 
-WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.14.0 — hostingpilot vereist**.
+WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.14.2 — hostingpilot vereist**.
 
 Beheer via **Netwerkbeheer → Site Factory → Alle sites**: lokaal concept aanmaken, per site publiceren/vervangen, klanttoegang handmatig delen, e-mail uit/aan, archiveren en herstellen. Geen bulkpublicatie. Nieuwe voorstellen starten met e-mail uit. Accountaanmaak/publicatie versturen geen WordPress-mail, ook wanneer normale site-mail is aangezet.
 
@@ -234,3 +234,13 @@ Gebruik de Git-repository als ontwikkelbron. Installeer de release-zip op de Wor
 Gebruikersafspraak van 15 oktober 2026: houd de code van Skeletor en sites.test fysiek op één plek, net als het gedeelde thema. De Git-repositories onder `/Users/jeffreypisa/Sites/skeletor/wp-content/plugins/emonks-dashboard` en `emonks-sitefactory` zijn de enige ontwikkelbron. De pluginmappen op `/Users/jeffreypisa/Sites/site-factory/wp-content/plugins` verwijzen daar met symbolische koppelingen naartoe. De oude bronlocatie `/Users/jeffreypisa/Sites/sitefactory` blijft als koppeling naar de Site Factory-repository beschikbaar voor bestaande scripts. Maak geen aparte runtimekopieën voor deze lokale installaties. Instellingen en inhoud blijven per WordPress-installatie of site in de database opgeslagen.
 
 Git-werkmappen worden door de updater uitgesloten van WordPress-updatemeldingen en automatische pluginupdates, zodat WordPress de gedeelde bron en Git-geschiedenis niet vervangt. Pas lokale code aan of haal wijzigingen op in de centrale repository. Normale installaties uit een release-zip bevatten geen `.git` en gebruiken wel de gewone WordPress-updater.
+
+Lokale Git-werkmappen (ook worktrees met een `.git`-bestand) voeren geen periodieke of handmatige GitHub-updatecontrole uit. De controlelink en bijbehorende meldingen verdwijnen; oude geplande controles worden opgeruimd. Normale release-installaties blijven iedere twaalf uur controleren.
+
+### 0.14.1
+
+- Schakel updatecontroles volledig uit voor de gedeelde lokale Git-bron, inclusief controlelink en foutmeldingen.
+
+### 0.14.2
+
+- Herstelkopieën controleren opgeslagen JSON met SHA-256 zonder de volledige databasekopie opnieuw te decoderen. Dit verlaagt de geheugenpiek vóór verwijderen of vervangen. Back-ups vragen de WordPress-beheergeheugenlimiet aan. Onvolledige schrijfacties worden geweigerd vóór de definitieve journalwissel.
