@@ -10,8 +10,9 @@ namespace Emonks\Factory\Online {
 }
 namespace {
  const ACF_PRO=true;const ACF_VERSION='6.8.1';const EMSF_PRIVATE_HOSTING_VERIFIED=true;
+ function get_plugins(){return ['emonks-dashboard/websitebeheer.php'=>['Name'=>'Emonks Dashboard','Version'=>'1.1.2']];}
  function acf_get_field($key){return [];}
- function get_site_option($key,$default=null){return 'skeletor';}
+ function get_site_option($key,$default=null){return $key==='active_sitewide_plugins'?['emonks-dashboard/websitebeheer.php'=>1]:'skeletor';}
  function wp_get_theme($slug){return new class {function get($key){return $key==='Version'?'1.1.8':'Skeletor';}function exists(){return true;}function is_allowed($scope){return true;}};}
  function wp_raise_memory_limit($context){$GLOBALS['memory']=$context;}
  function wp_generate_uuid4(){return '12345678-1234-1234-1234-123456789012';}function switch_to_blog($id){}function restore_current_blog(){}

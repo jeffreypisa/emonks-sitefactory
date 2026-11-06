@@ -72,6 +72,6 @@ final class Mail {
             if(wp_parse_url($url,PHP_URL_SCHEME)==='https' && in_array($host,['api.wordpress.org','downloads.wordpress.org','fonts.googleapis.com','fonts.gstatic.com','fonts.google.com'],true)){return $pre;}
             return new \WP_Error('emsf_demo_offline','Uitgaande integraties staan uit voor dit voorstel.');
         },PHP_INT_MAX,3);
-        add_action('wp_footer',static function(){if(!Sites::local()&&self::off()){echo '<aside role="note" style="padding:12px;text-align:center;background:#f6f7f7;color:#1d2327">'.esc_html(self::NOTICE).'</aside>';}});
+        add_action('wp_footer',static function(){if(!Sites::local()&&self::off()&&NotificationSettings::showWebsiteNotices()){echo '<aside role="note" style="padding:12px;text-align:center;background:#f6f7f7;color:#1d2327">'.esc_html(self::NOTICE).'</aside>';}});
     }
 }

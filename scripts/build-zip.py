@@ -6,6 +6,7 @@ root = Path(__file__).resolve().parents[1]
 main = 'emonks-site-factory.php'
 version = re.search(r"Version:\s*([0-9.]+)", (root / main).read_text()).group(1)
 files = [root / name for name in ['emonks-site-factory.php', 'shared-schema.json', 'README.md']]
+files.append(root / 'importer' / 'emonks-site-importer.php')
 for folder in ('includes', 'assets'):
     files.extend(p for p in (root / folder).rglob('*') if p.is_file())
 assert all(not p.is_symlink() for p in files)

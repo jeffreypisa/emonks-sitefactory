@@ -18,7 +18,7 @@ final class Factory {
         add_action('acf/save_post',static fn()=>self::invalidate_approval(),30);
         add_action('updated_option',static function($name){if(str_starts_with($name,'options_')||str_starts_with($name,'theme_mods_')||in_array($name,['blogname','blogdescription','page_on_front','show_on_front'],true)){self::invalidate_approval();}},10,1);
         add_action('wp_update_nav_menu',static fn()=>self::invalidate_approval());
-        add_action('wp_footer',static function(){if(!is_main_site()){echo '<aside aria-label="Demowebsite" style="position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#172b2a;color:#fff;padding:6px 14px;text-align:center;font:13px sans-serif">Lokaal websitevoorstel van Emonks'.(Online\Mail::off()?' · E-mail uit: formulieren versturen geen berichten.':' · E-mail aan.').'</aside>';}});
+        add_action('wp_footer',static function(){if(!is_main_site()){echo '<aside aria-label="Demowebsite" style="position:sticky;bottom:0;z-index:9999;background:#172b2a;color:#fff;padding:6px 14px;text-align:center;font:13px sans-serif">Lokaal websitevoorstel van Emonks'.(Online\Mail::off()?' · E-mail uit: formulieren versturen geen berichten.':' · E-mail aan.').'</aside>';}});
         add_action('send_headers',static fn()=>header('X-Robots-Tag: noindex, nofollow, noarchive'));
         // Prevent third-party form integrations from making outbound requests in local demos.
         add_filter('pre_http_request',static function($pre,$args,$url){
@@ -51,7 +51,7 @@ final class Factory {
         if (!defined('EMSF_LOCAL')||!EMSF_LOCAL||wp_get_environment_type()!=='local'||!is_multisite()) { throw new \RuntimeException('Alleen beschikbaar in het lokale Factory-netwerk.'); }
         if (!current_user_can('manage_network')) { throw new \RuntimeException('Netwerkbeheerder vereist. Gebruik --user=emonks.'); }
     }
-    public static function state(): string { return EMSF_STATE_DIR; }
+    public static function state(): string { return class_exists(Standalone::class, false) && Standalone::importing() ? Standalone::storage() : EMSF_STATE_DIR; }
     public static function model_dir(): string {
         $dir=self::state().'/models/'.get_current_blog_id();
         if (!is_dir($dir)&&!wp_mkdir_p($dir)) { throw new \RuntimeException('Projectmodellenmap niet schrijfbaar.'); }
@@ -96,8 +96,15 @@ final class Factory {
         if(is_wp_error($id)){throw new \RuntimeException($id->get_error_message());}
         update_site_meta($id,'emsf_mail_mode','off');
         switch_to_blog($id);
-        try{switch_theme(ThemeRelease::slug());update_option('home','https://'.$domain);update_option('siteurl','https://'.$domain);update_option('blog_public',0);update_option('emsf_uuid',$p['uuid']);update_option('emsf_slug',$p['slug']);update_option('permalink_structure','/%postname%/');}finally{restore_current_blog();}
+        try{self::remove_new_site_default_post();switch_theme(ThemeRelease::slug());update_option('home','https://'.$domain);update_option('siteurl','https://'.$domain);update_option('blog_public',0);update_option('emsf_uuid',$p['uuid']);update_option('emsf_slug',$p['slug']);update_option('permalink_structure','/%postname%/');}finally{restore_current_blog();}
         self::main(static function()use($p,$id){$v=get_post_meta($p['id'],'_emsf',true);$v['site_id']=$id;$v['updated_at']=gmdate('c');update_post_meta($p['id'],'_emsf',$v);});return self::find($slug);
+    }
+    /** Called only immediately after WordPress initializes a new Factory site. */
+    private static function remove_new_site_default_post(): void {
+        $post = get_post(1);
+        if ($post && $post->post_type === 'post' && !wp_delete_post($post->ID, true)) {
+            throw new \RuntimeException('Het standaard WordPress-bericht kon niet definitief worden verwijderd.');
+        }
     }
     public static function invalidate_approval(): void {
         $slug=get_option('emsf_slug');if(!$slug){return;}

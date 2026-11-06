@@ -40,3 +40,33 @@
 .emsf-row-actions .emsf-edit-link{display:inline-block;line-height:1.5;text-decoration:none;white-space:nowrap}
 .emsf-row-actions .emsf-edit-link:hover{text-decoration:underline}
 .emsf-row-actions .emsf-edit-link:focus-visible{outline:2px solid #2271b1;outline-offset:3px}
+
+/* Delivery is a small create form followed by an immutable package list. */
+.emsf-package-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.emsf-package-heading h2{margin:0}
+.emsf-package-action,.emsf-package-action .submit{margin:0!important;padding:0!important}
+.emsf-package-create{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:0 0 28px}
+.emsf-package-create label{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px;font-weight:600}
+.emsf-package-create input[type=url]{width:100%;max-width:none;font-weight:400}
+.emsf-package-create .submit{margin:0;padding:0}
+.emsf-package-create [role=status]{flex-basis:100%;color:#50575e;font-size:13px}
+.emsf-package-list{table-layout:auto}
+.emsf-package-list th,.emsf-package-list td{padding:14px 12px;vertical-align:middle}
+.emsf-package-list td:nth-child(2){overflow-wrap:anywhere}
+.emsf-package-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;white-space:nowrap}
+.emsf-package-actions .button-link-delete{padding:4px 0}
+.emsf-package-badge{display:inline-block;border-radius:4px;padding:2px 6px;background:#e7edf7;color:#27385d;font-size:11px;margin:4px 0 0 6px}
+.emsf-package-undo{display:flex;align-items:center;gap:10px;padding:10px 0}
+.emsf-package-empty{padding:18px 0;color:#646970}
+.emsf-package-log{margin-top:20px;font-size:13px;color:#50575e}
+.emsf-package-log summary{cursor:pointer;color:#3858a0}
+.emsf-package-log code{overflow-wrap:anywhere}
+@media(max-width:782px){
+ .emsf-package-heading{align-items:flex-start;flex-wrap:wrap}
+ .emsf-package-list thead{display:none}
+ .emsf-package-list tr{display:block;padding:12px 0;border-bottom:1px solid #dcdcde}
+ .emsf-package-list td{display:block;padding:5px 12px}
+ .emsf-package-list td::before{content:attr(data-label) ': ';font-weight:600}
+ .emsf-package-list td:last-child::before{display:none}
+ .emsf-package-actions{margin-top:6px}
+}

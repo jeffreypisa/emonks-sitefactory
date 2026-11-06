@@ -50,6 +50,13 @@ final class Privacy {
         Preview::captureShare();
         $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
         if ($script === 'wp-login.php') { return; }
+        // Let WordPress send ordinary anonymous admin visits to its login screen.
+        if (is_admin() && !is_user_logged_in() && !wp_doing_ajax()
+            && !(defined('REST_REQUEST') && REST_REQUEST)
+            && !in_array($script, ['admin-post.php', 'async-upload.php'], true)) {
+            auth_redirect();
+            exit;
+        }
         if (self::unavailable()) {
             if (Preview::frontend()) { Preview::screen(); }
             wp_die('Dit voorstel is tijdelijk offline.', 'Geen toegang', ['response'=>403]);

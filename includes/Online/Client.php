@@ -108,6 +108,7 @@ final class Client {
         if($bound && ($bound['endpoint']??'')!==self::endpoint()){throw new \RuntimeException('Deze site hoort bij een ander online netwerk.');}
         if(in_array($action,['users_get','customer_set','user_create'],true) && empty(self::status($slug)['customer_management'])){throw new \RuntimeException('Installeer Site Factory 0.8.0 ook online om gebruikers en opdrachtgevers te beheren.');}
         if($action==='preview_public' && empty(self::status($slug)['optional_preview'])){throw new \RuntimeException('Installeer Site Factory 0.9.0 ook online om de website zonder code toegankelijk te maken.');}
+        if($action==='website_notices' && version_compare((string)(self::status($slug)['plugin_version']??'0'),'0.22.0','<')){throw new \RuntimeException('Werk Site Factory online bij naar 0.22.0 voor websitemeldingen per site.');}
         if($action==='activity_settings' && (self::status($slug)['protocol']??0)<4){throw new \RuntimeException('Werk eerst de online Site Factory-plugin bij naar 0.4.0 voor activiteit.');}
         if(in_array($action,['preview_get','preview_generate','preview_rotate','preview_revoke'],true) && empty(self::status($slug)['persistent_preview'])){throw new \RuntimeException('Installeer Site Factory 0.5.7 ook online om de vaste previewcode te bekijken en delen.');}
         if ($action === 'cancel') {

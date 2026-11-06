@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emonks Site Factory
  * Description: Lokale prospectsites met Skeletor, geïsoleerde projectmodellen en overdraagbare inhoud.
- * Version: 0.14.2
+ * Version: 0.25.6
  * Update URI: https://github.com/jeffreypisa/emonks-sitefactory
  * Network: true
  * Requires PHP: 8.1
@@ -15,6 +15,11 @@ require_once __DIR__.'/includes/Factory.php';
 require_once __DIR__.'/includes/Package.php';
 require_once __DIR__.'/includes/ThemeRelease.php';
 require_once __DIR__.'/includes/Build.php';
+require_once __DIR__.'/includes/DeliverySoftware.php';
+require_once __DIR__.'/includes/FullSite.php';
+require_once __DIR__.'/includes/HandoverLibrary.php';
+require_once __DIR__.'/includes/Handover.php';
+require_once __DIR__.'/includes/Standalone.php';
 foreach (['Store','Software','NotificationSettings','Activity','Preview','Optimizer','Privacy','Snapshot','Accounts','Mail','Receiver','Client','Pull','Sites','FollowUp','ContentChanges','Publication','MailTemplate','MailDraft','Admin'] as $module) { require_once __DIR__.'/includes/Online/'.$module.'.php'; }
 if (defined('EMSF_ONLINE') && EMSF_ONLINE) { Online\Privacy::boot(); Online\Optimizer::boot(); Online\Receiver::boot(); }
 Online\Accounts::boot();
@@ -23,5 +28,6 @@ Online\Activity::boot();
 Online\Admin::boot();
 Online\ContentChanges::boot();
 Online\Publication::boot();
+Handover::boot();
 if (defined('EMSF_LOCAL') && EMSF_LOCAL) { Factory::boot(); }
 if (defined('WP_CLI') && WP_CLI) { require_once __DIR__.'/includes/CLI.php'; }

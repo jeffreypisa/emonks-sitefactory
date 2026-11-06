@@ -7,6 +7,7 @@ final class Package {
     private static array $urls=[];
     private static array $refs=[];
     private static function authorize_import(): void {
+        if (class_exists(Standalone::class, false) && Standalone::importing()) { Standalone::authorize(); return; }
         if (Online\Receiver::$importing && defined('EMSF_ONLINE') && EMSF_ONLINE && is_super_admin() && Online\Privacy::managed()) { return; }
         Factory::local();
     }
@@ -64,6 +65,10 @@ final class Package {
         return $value;
     }
     /** Known scalar/layout metadata missed by ACF's dynamically registered field lookup. */
+    /** Local deduplication markers from earlier build scripts are not website content. */
+    private static function importTrackingMeta(string $type,string $key): bool {
+        return $type==='attachment' && in_array($key,['_sdda_logo_hash','_sdda_form_hash'],true);
+    }
     private static function layoutMeta(string $type,string $key,array $values): bool {
         $values=array_map('maybe_unserialize',$values);
         if($key==='_stroken_layout_meta'){
@@ -85,6 +90,22 @@ final class Package {
         }
         if($type==='skeletor_teaser'&&$key==='_field_teaser_hover'){
             return count(array_filter($values,static fn($v)=>!in_array($v,['','field_teaser_hover'],true)))===0;
+        }
+        // Retain obsolete hero scalars without mapping them onto current design settings.
+        if($type!=='attachment'&&in_array($key,['hero_image_opacity_mode','hero_image_opacity'],true)){
+            return count(array_filter($values,static fn($v)=>$key==='hero_image_opacity_mode'
+                ? !in_array($v,['','inherit','custom'],true)
+                : ($v!==''&&(!is_numeric($v)||$v<0||$v>100))))===0;
+        }
+        // Explicit media provenance only; arbitrary _emonks metadata remains unsupported.
+        if($type==='attachment'&&$key==='_emonks_capture_date'){
+            foreach($values as $value){if(!is_string($value)||!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D',$value,$date)||!checkdate((int)$date[2],(int)$date[3],(int)$date[1])){return false;}}return true;
+        }
+        if($type==='attachment'&&$key==='_emonks_generated_concept'){
+            return count(array_filter($values,static fn($v)=>!in_array($v,['0','1',0,1],true)))===0;
+        }
+        if($type==='attachment'&&$key==='_emonks_capture_source'){
+            return count(array_filter($values,static fn($v)=>!in_array($v,['live','archive'],true)))===0;
         }
         if($type==='attachment'&&$key==='_skeletor_crops'){
             foreach($values as $value){
@@ -153,7 +174,7 @@ final class Package {
             foreach(['post_type','post_status','post_name','post_title','post_content','post_excerpt','post_date','menu_order','post_mime_type'] as $key){$row['post'][$key]=self::encode($p->$key);}
             $row['parent']=$p->post_parent?self::ref('post',(int)$p->post_parent):0;
             foreach(get_post_meta($p->ID) as $key=>$values){
-                if(in_array($key,['_has_fluentform','_pingme','_encloseme','_edit_lock','_edit_last','_wp_attached_file','_wp_attachment_metadata','_wp_attachment_backup_sizes','_skeletor_search_text'],true)||str_starts_with($key,'_emsf')){continue;}
+                if(self::importTrackingMeta($p->post_type,$key)||in_array($key,['_has_fluentform','_pingme','_encloseme','_edit_lock','_edit_last','_wp_attached_file','_wp_attachment_metadata','_wp_attachment_backup_sizes','_skeletor_search_text'],true)||str_starts_with($key,'_emsf')){continue;}
                 $fieldkey=get_post_meta($p->ID,'_'.$key,true);$field=is_string($fieldkey)&&str_starts_with($fieldkey,'field_')?acf_get_field($fieldkey):null;
                 if(!$field&&!self::layoutMeta($p->post_type,$key,$values)&&!str_starts_with($key,'teaser_')&&!in_array($key,['_thumbnail_id','_wp_page_template','_wp_attachment_image_alt','_wp_old_slug','_wp_old_date'],true)&&!(str_starts_with($key,'_')&&isset($values[0])&&str_starts_with((string)$values[0],'field_'))){$package['unsupported'][]='Onbekende postmetadata: '.$p->post_type.'/'.$key;continue;}
                 $row['meta'][$key]=array_map(static fn($v)=>self::encode(maybe_unserialize($v),$field?:null,$key),$values);
@@ -178,17 +199,17 @@ final class Package {
         self::json($dir.'/manifest.json',$package);return ['posts'=>count($package['posts']),'terms'=>count($package['terms']),'media'=>count($package['files']),'options'=>count($package['options']),'path'=>$dir];
     }
     private static function asset(string $source,string $relative,string $dir,array &$package): void {
-        try{Online\Receiver::assetName($relative);}catch(\Throwable $e){throw new \RuntimeException('Pakketbestand heeft een niet-ondersteunde naam: '.$relative.'. Hernoem het bronbestand veilig voordat je opnieuw exporteert.');}
+        try{Online\Receiver::assetName($relative);}catch(\Throwable $e){throw new \RuntimeException('Pakketbestand wordt niet ondersteund: '.$relative.'. Controleer het bestandstype en de bestandsnaam voordat je opnieuw exporteert.');}
         wp_mkdir_p(dirname($dir.'/files/'.$relative));if(!copy($source,$dir.'/files/'.$relative)){throw new \RuntimeException('Kopiëren media mislukt.');}$package['files'][$relative]=['sha256'=>hash_file('sha256',$source),'size'=>filesize($source)];
     }
     public static function read(string $dir): array {
         $p=json_decode((string)file_get_contents($dir.'/manifest.json'),true,512,JSON_THROW_ON_ERROR);
         if(($p['format']??'')!==self::FORMAT||($p['version']??0)!==1||($p['theme']??'')!=='skeletor'){throw new \RuntimeException('Onbekend pakketformaat.');}
-        foreach($p['files'] as $name=>$meta){if(!is_string($name)||str_contains($name,'..')||str_contains($name,'\\')||str_starts_with($name,'/')||!preg_match('/\.(?:jpe?g|png|webp|gif|svg|avif|ico|pdf|woff2?|ttf|otf|css|txt|json)$/i',$name)){throw new \RuntimeException('Onveilig mediapad.');}$root=realpath($dir.'/files');$file=realpath($dir.'/files/'.$name);if(!$root||!$file||!str_starts_with($file,$root.'/')||filesize($file)!==($meta['size']??-1)||!hash_equals($meta['sha256'],hash_file('sha256',$file))){throw new \RuntimeException('Ongeldig pakketbestand: '.$name);}}
+        foreach($p['files'] as $name=>$meta){if(!is_string($name)||str_contains($name,'..')||str_contains($name,'\\')||str_starts_with($name,'/')||!preg_match('/\.(?:jpe?g|png|webp|gif|svg|avif|ico|pdf|docx|woff2?|ttf|otf|css|txt|json)$/i',$name)){throw new \RuntimeException('Onveilig mediapad.');}$root=realpath($dir.'/files');$file=realpath($dir.'/files/'.$name);if(!$root||!$file||!str_starts_with($file,$root.'/')||filesize($file)!==($meta['size']??-1)||!hash_equals($meta['sha256'],hash_file('sha256',$file))){throw new \RuntimeException('Ongeldig pakketbestand: '.$name);}}
         foreach($p['posts'] as $post){if(isset($post['file'])&&!isset($p['files'][$post['file']])){throw new \RuntimeException('Mediabestand ontbreekt in controlesommen.');}}
         $refs=[];foreach(['posts','terms','menus','forms'] as $kind){foreach($p[$kind] as $row){if(isset($refs[$row['ref']])){throw new \RuntimeException('Dubbele pakketreferentie.');}$refs[$row['ref']]=true;}}
         $check=static function($v)use(&$check,$refs){if(is_array($v)){foreach(['$ref','$design'] as $key){if(isset($v[$key])&&!isset($refs[$v[$key]])){throw new \RuntimeException('Onbekende pakketreferentie: '.$v[$key]);}}foreach($v as $child){$check($child);}}};$check($p);
-        foreach($p['options'] as $key=>$v){if(!preg_match('/^_?options_/',(string)$key)&&!in_array($key,['blogname','blogdescription','show_on_front','page_on_front','page_for_posts','permalink_structure','site_icon'],true)){throw new \RuntimeException('Optie niet toegestaan: '.$key);}if(str_contains($key,'skeletor_theme_options_roles')){throw new \RuntimeException('Rolrechten zijn niet overdraagbaar.');}}
+        foreach($p['options'] as $key=>$v){if(!preg_match('/^_?options_/',(string)$key)&&!in_array($key,['blogname','blogdescription','show_on_front','page_on_front','page_for_posts','permalink_structure','site_icon','timezone_string','gmt_offset','date_format','time_format','start_of_week','WPLANG','posts_per_page','default_comment_status','default_ping_status'],true)){throw new \RuntimeException('Optie niet toegestaan: '.$key);}if(str_contains($key,'skeletor_theme_options_roles')){throw new \RuntimeException('Rolrechten zijn niet overdraagbaar.');}}
         // Existing manifests must remain byte-for-byte equivalent when retried.
         return $p;
     }
@@ -268,9 +289,15 @@ final class Package {
             }
         }
     }
+    /** Imported IDs supersede the menu mapping queued by switch_theme(). */
+    public static function importMenuLocations(array $locations): void {
+        set_theme_mod('nav_menu_locations', $locations);
+        // after_switch_theme runs on the next request and would restore deleted source IDs.
+        delete_option('theme_switch_menu_locations');
+    }
     public static function import(string $dir,bool $apply=false,bool $replace=false): array {
         global $wpdb;
-        self::authorize_import();if(is_main_site()||!get_option('emsf_uuid')){throw new \RuntimeException('Kies een geregistreerde prospectsite.');}$p=self::read($dir);
+        self::authorize_import();if(!(class_exists(Standalone::class, false) && Standalone::importing()) && (is_main_site()||!get_option('emsf_uuid'))){throw new \RuntimeException('Kies een geregistreerde prospectsite.');}$p=self::read($dir);
         self::register_models($p);
         foreach($p['posts'] as $row){if(!post_type_exists($row['post']['post_type'])){throw new \RuntimeException('Ontbrekend inhoudstype: '.$row['post']['post_type']);}}
         foreach($p['terms'] as $row){if(!taxonomy_exists($row['taxonomy'])){throw new \RuntimeException('Ontbrekende taxonomie: '.$row['taxonomy']);}}
@@ -279,9 +306,13 @@ final class Package {
         $map=$replace?[]:(array)get_option('emsf_import_map',[]);$urls=['{{emsf:home}}'=>home_url(), '{{emsf:fonts}}'=>wp_upload_dir()['baseurl'].'/skeletor-fonts'];$created=[];$build=wp_generate_uuid4();
         $tables=$wpdb->get_results($wpdb->prepare('SHOW TABLE STATUS WHERE Name LIKE %s',$wpdb->esc_like($wpdb->prefix).'%'),ARRAY_A);
         foreach($tables as $table){if(strcasecmp($table['Engine']??'','InnoDB')){flock($lock,LOCK_UN);fclose($lock);throw new \RuntimeException('Import vereist transactionele tabellen.');}}
-        $committed=false;$wpdb->query('START TRANSACTION');
+        $committed=false;if($wpdb->query('START TRANSACTION')===false){flock($lock,LOCK_UN);fclose($lock);throw new \RuntimeException('Databasetransactie starten mislukt.');}
         try {
-            if ($replace) { Online\Snapshot::clearContent(); }
+            if ($replace) {
+                if(class_exists(Standalone::class,false) && Standalone::importing()){Standalone::prepareContent();}
+                else{Online\Snapshot::clearContent();}
+            }
+            if (class_exists(Standalone::class, false) && Standalone::importing()) { Standalone::installModels($p); }
             require_once ABSPATH.'wp-admin/includes/image.php';require_once ABSPATH.'wp-admin/includes/media.php';require_once ABSPATH.'wp-admin/includes/file.php';
             foreach($p['terms'] as $row){$id=$map[$row['ref']]??0;$args=['slug'=>$row['slug'],'description'=>''];if($id&&term_exists($id,$row['taxonomy'])){$t=wp_update_term($id,$row['taxonomy'],['name'=>$row['name']]+$args);}else{$t=wp_insert_term($row['name'],$row['taxonomy'],$args);}if(is_wp_error($t)){if($t->get_error_code()==='term_exists'){$map[$row['ref']]=(int)$t->get_error_data();}else{throw new \RuntimeException($t->get_error_message());}}else{$map[$row['ref']]=(int)$t['term_id'];}}
             foreach($p['menus'] as $row){$id=$map[$row['ref']]??0;if(!$id||!wp_get_nav_menu_object($id)){$id=wp_create_nav_menu($row['name']);}if(is_wp_error($id)){throw new \RuntimeException($id->get_error_message());}$map[$row['ref']]=(int)$id;}
@@ -305,9 +336,10 @@ final class Package {
             foreach($p['terms'] as $row){$r=wp_update_term($map[$row['ref']],$row['taxonomy'],['parent'=>self::decode($row['parent'],$map,$urls),'description'=>self::decode($row['description'],$map,$urls)]);if(is_wp_error($r)){throw new \RuntimeException($r->get_error_message());}}
             foreach($p['menus'] as $menu){$parents=[];foreach($menu['items'] as $item){$key=$menu['ref'].':item:'.$item['source_id'];$args=['menu-item-title'=>$item['title'],'menu-item-status'=>'publish','menu-item-type'=>$item['type'],'menu-item-object'=>$item['object'],'menu-item-object-id'=>self::decode($item['object_ref'],$map,$urls),'menu-item-url'=>self::decode($item['url'],$map,$urls),'menu-item-target'=>$item['target'],'menu-item-classes'=>implode(' ',$item['classes']),'menu-item-xfn'=>$item['xfn'],'menu-item-position'=>$item['position']];$id=wp_update_nav_menu_item($map[$menu['ref']],$map[$key]??0,$args);if(is_wp_error($id)){throw new \RuntimeException($id->get_error_message());}$map[$key]=$id;update_post_meta($id,'link_stijl',in_array($item['link_stijl']??'link',['link','btn-primary','btn-secondary'],true)?($item['link_stijl']??'link'):'link');$parents[$item['source_id']]=[$id,$item['parent_source_id']];}foreach($parents as [$id,$parent]){update_post_meta($id,'_menu_item_menu_item_parent',$parent?($parents[$parent][0]??0):0);}}
             foreach($p['options'] as $key=>$value){update_option($key,self::decode($value,$map,$urls));}
-            set_theme_mod('nav_menu_locations',self::decode($p['menu_locations'],$map,$urls));
+            self::importMenuLocations(self::decode($p['menu_locations'],$map,$urls));
             foreach($p['files'] as $name=>$meta){if(str_starts_with($name,'fonts/')){$target=wp_upload_dir()['basedir'].'/skeletor-fonts/'.substr($name,6);if(!is_file($target)){wp_mkdir_p(dirname($target));if(!copy($dir.'/files/'.$name,$target)){throw new \RuntimeException('Font opslaan mislukt.');}$created[]=$target;}}}
             update_option('emsf_import_map',$map,false);update_option('emsf_last_build',$build,false);update_option('blog_public',0);if (defined('EMSF_LOCAL') && EMSF_LOCAL) { Factory::invalidate_approval(); }
+            if (class_exists(Standalone::class, false) && Standalone::importing()) { Standalone::commitReceipt(); }
             if($wpdb->last_error){throw new \RuntimeException('Databasefout tijdens import.');}if($wpdb->query('COMMIT')===false){throw new \RuntimeException('Commit mislukt.');}$committed=true;flush_rewrite_rules(false);wp_cache_flush();
             self::json(Factory::state().'/build-'.$build.'.json',$result+['success'=>true,'package_sha256'=>hash_file('sha256',$dir.'/manifest.json'),'created_at'=>gmdate('c')]);return $result+['build'=>$build];
         }catch(\Throwable $e){if(!$committed){$wpdb->query('ROLLBACK');foreach($created as $path){self::remove_generated($path);}}wp_cache_flush();self::json(Factory::state().'/build-'.$build.'.json',['success'=>false,'error'=>$e->getMessage(),'site'=>get_current_blog_id()]);throw $e;}

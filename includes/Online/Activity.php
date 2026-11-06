@@ -31,7 +31,7 @@ final class Activity {
         return Store::locked('activity-'.$site,static function()use($site){
             $old=Store::read('activity-'.$site);$data=self::prune($old);
             if($old&&$old!==$data){Store::write('activity-'.$site,$data);}
-            return ['policy'=>self::policy($site),'events'=>$data['events'],'notifications'=>$data['notifications'],'timezone'=>'UTC','retention_days'=>30,'max_events'=>100];
+            return ['policy'=>self::policy($site),'website_notices'=>NotificationSettings::websiteNotices($site),'events'=>$data['events'],'notifications'=>$data['notifications'],'timezone'=>'UTC','retention_days'=>30,'max_events'=>100];
         });
     }
     private static function customer(int $site,int $user): bool {
@@ -108,7 +108,7 @@ final class Activity {
             $site=get_current_blog_id();$uid=get_current_user_id();
             if(self::customer($site,$uid)){self::record($site,'customer_front',wp_get_session_token(),$uid);}
             elseif(!is_super_admin()&&Preview::allowed()){self::record($site,'preview_view',Preview::session(),0,Preview::attributed());}
-            if(self::policy($site)['enabled']){echo '<p style="padding:12px;text-align:center;font:12px/1.6 system-ui;color:inherit">Voorstelomgeving · Bekijken, klantlogin en inhoudswijzigingen worden aan de maker gemeld. Een gedeelde code bewijst geen identiteit.</p>';}
+            if(NotificationSettings::showWebsiteNotices()&&self::policy($site)['enabled']){echo '<p style="padding:12px;text-align:center;font:12px/1.6 system-ui;color:inherit">Voorstelomgeving · Bekijken, klantlogin en inhoudswijzigingen worden aan de maker gemeld. Een gedeelde code bewijst geen identiteit.</p>';}
         },99);
         add_filter('login_message',static function($message){if(Privacy::managed()&&self::policy(get_current_blog_id())['enabled']){$message.='<p class="message">Deze voorstelomgeving registreert klantlogin en dashboardopening voor de maker.</p>';}return $message;});
     }

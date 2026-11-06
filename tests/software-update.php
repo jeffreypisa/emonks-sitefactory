@@ -5,7 +5,12 @@ namespace {
  foreach(['file.php','plugin.php','class-wp-upgrader.php']as$file){file_put_contents($base.'/wp/wp-admin/includes/'.$file,'<?php');}
  define('ABSPATH',$base.'/wp/');define('WP_PLUGIN_DIR',$base.'/wp/plugins');define('EMSF_STATE_DIR',$base.'/private');
  $version='1.0.0';$fail=false;
- function get_site_option($key,$default=''){return $key==='emsf_remote_theme_slug'?'skeletor-master':'skeletor';}
+ function get_site_option($key,$default=''){return $key==='active_sitewide_plugins'?($GLOBALS['networkPlugins']??[]):($key==='emsf_remote_theme_slug'?'skeletor-master':'skeletor');}
+ function update_site_option($key,$value){$GLOBALS['networkPlugins']=$value;}
+ function activate_plugin($file,$redirect,$network){if(!empty($GLOBALS['activationFail']))return new WP_Error();$GLOBALS['networkPlugins'][$file]=time();return null;}
+ function get_plugins(){
+  $found=[];foreach(glob(WP_PLUGIN_DIR.'/*/websitebeheer.php')?:[]as$file){$bytes=file_get_contents($file);preg_match('/Version:\s*(\S+)/',$bytes,$v);$found[basename(dirname($file)).'/websitebeheer.php']=['Name'=>'Emonks Dashboard','Version'=>$v[1]??''];}return $found;
+ }
  function wp_get_theme($slug){global $version;return new class($slug){function __construct(private $slug){}function get($key){global $version;return $key==='Version'?$version:'Skeletor';}function get_stylesheet_directory(){global $base;return $base.'/source';}};}
  function current_user_can($cap){return true;}function wp_is_file_mod_allowed($context){return true;}function get_current_user_id(){return 1;}
  function get_theme_root(){return ABSPATH.'themes';}function get_filesystem_method(){return 'direct';}function WP_Filesystem(){return true;}
@@ -27,7 +32,9 @@ namespace {
   foreach(['skeletor-master/../outside.php','other-root/a.php','skeletor-master/a\\b.php','skeletor-master//a.php']as$name){$bad=$base.'/bad.zip';makeZip($bad,[$name=>'bad']);rejected(fn()=>Software::validate($bad,$meta),'Unsafe entry');}
   rejected(fn()=>Software::validate($path,array_replace($meta,['version'=>'9.0.0'])),'Wrong version');rejected(fn()=>Software::component('acf'),'Unknown component');
   mkdir($base.'/source');mkdir($base.'/source/src');mkdir($base.'/source/docs');mkdir($base.'/source/node_modules');file_put_contents($base.'/source/style.css',"/* Theme Name: Skeletor\nVersion: 1.0.0\n*/");file_put_contents($base.'/source/functions.php','<?php');file_put_contents($base.'/source/index.php','<?php');file_put_contents($base.'/source/src/Runtime.php','<?php');file_put_contents($base.'/source/docs/private.md','secret');file_put_contents($base.'/source/.env','credential');file_put_contents($base.'/source/node_modules/foo.js','development');
-  $packed=Software::package('theme',$base.'/packed.zip');$zip=new ZipArchive();$zip->open($base.'/packed.zip');check($zip->locateName('skeletor-master/src/Runtime.php')!==false,'Runtime included');check($zip->locateName('skeletor-master/.env')===false&&$zip->locateName('skeletor-master/docs/private.md')===false&&$zip->locateName('skeletor-master/node_modules/foo.js')===false,'Local/private files excluded');$zip->close();Software::validate($base.'/packed.zip',$packed);
+  mkdir($base.'/source/vendor');mkdir($base.'/source/vendor/bin');symlink('../../src/Runtime.php',$base.'/source/vendor/bin/dev-tool');
+  $packed=Software::package('theme',$base.'/packed.zip');$zip=new ZipArchive();$zip->open($base.'/packed.zip');check($zip->locateName('skeletor-master/src/Runtime.php')!==false,'Runtime included');check($zip->locateName('skeletor-master/.env')===false&&$zip->locateName('skeletor-master/docs/private.md')===false&&$zip->locateName('skeletor-master/node_modules/foo.js')===false,'Local/private files excluded');check($zip->locateName('skeletor-master/vendor/bin/dev-tool')===false,'Composer development binaries excluded');$zip->close();Software::validate($base.'/packed.zip',$packed);
+  symlink('Runtime.php',$base.'/source/src/unsafe.php');rejected(fn()=>Software::package('theme',$base.'/unsafe.zip'),'Runtime symlinks still rejected');unlink($base.'/source/src/unsafe.php');
   mkdir(get_theme_root().'/skeletor-master');file_put_contents(get_theme_root().'/skeletor-master/old.php','old');
   \Emonks\Factory\ThemeRelease::useRequestSlug('skeletor-master');
   $request=['source'=>'source-test','upload'=>'12345678-1234-1234-1234-123456789012','meta'=>$meta,'expected_version'=>'1.0.0'];Software::prepare($request);
@@ -39,6 +46,24 @@ namespace {
   $request['upload']='22345678-1234-1234-1234-123456789012';Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($path))]);$GLOBALS['fail']=true;rejected(fn()=>Software::execute($request),'Installer error');check(is_file(get_theme_root().'/skeletor-master/style.css')&&!is_file(get_theme_root().'/skeletor-master/partial'),'Rollback restores previous files');check(Store::read('software-'.$request['upload'])['status']==='restored','Rollback journal');
   $GLOBALS['fail']=false;$plugin=Software::package('plugin',$base.'/plugin.zip');Software::validate($base.'/plugin.zip',$plugin);preg_match('/^ \* Version: (.+)$/m',file_get_contents(dirname(__DIR__).'/emonks-site-factory.php'),$version);check($plugin['version']===trim($version[1]),'Plugin version in package');
   $request=['source'=>'source-test','upload'=>'32345678-1234-1234-1234-123456789012','meta'=>$plugin,'expected_version'=>$plugin['version']];Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($base.'/plugin.zip'))]);$result=Software::execute($request);check($result['updated']&&is_file(WP_PLUGIN_DIR.'/emonks-site-factory/includes/Online/Software.php'),'Plugin installed at fixed root');
+  // Real filesystem fixtures exercise missing installs, network activation and rollback.
+  $dashboardRoot=WP_PLUGIN_DIR.'/emonks-dashboard';mkdir($dashboardRoot);mkdir($dashboardRoot.'/includes');mkdir($dashboardRoot.'/assets');
+  file_put_contents($dashboardRoot.'/websitebeheer.php',"<?php\n/**\n * Plugin Name: Emonks Dashboard\n * Version: 1.1.2\n */");
+  file_put_contents($dashboardRoot.'/includes/Agency.php','<?php');file_put_contents($dashboardRoot.'/includes/Workspace.php','<?php');file_put_contents($dashboardRoot.'/assets/workspace.css','body{}');file_put_contents($dashboardRoot.'/.env','secret');
+  $dashboard=Software::package('dashboard',$base.'/dashboard.zip');Software::validate($base.'/dashboard.zip',$dashboard);
+  $zip=new ZipArchive();$zip->open($base.'/dashboard.zip');check($zip->locateName('emonks-dashboard/websitebeheer.php')!==false&&$zip->locateName('emonks-dashboard/.env')===false,'Dashboard runtime package excludes secrets');$zip->close();
+  $wp_filesystem->delete($dashboardRoot,true);
+  $request=['source'=>'source-test','upload'=>'42345678-1234-1234-1234-123456789012','meta'=>$dashboard,'expected_version'=>''];Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($base.'/dashboard.zip'))]);Software::execute($request);
+  check(\Emonks\Factory\ThemeRelease::dashboard()['version']==='1.1.2'&&\Emonks\Factory\ThemeRelease::dashboard()['network_active'],'Missing dashboard installed and network activated');
+  $request['upload']='52345678-1234-1234-1234-123456789012';$request['expected_version']='1.1.2';Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($base.'/dashboard.zip'))]);$GLOBALS['activationFail']=true;
+  rejected(fn()=>Software::execute($request),'Activation error rolls back');check(is_file($dashboardRoot.'/websitebeheer.php')&&\Emonks\Factory\ThemeRelease::dashboard()['network_active'],'Rollback restores existing dashboard and activation');$GLOBALS['activationFail']=false;
+  $wp_filesystem->delete($dashboardRoot,true);$GLOBALS['networkPlugins']=[];
+  $request['upload']='62345678-1234-1234-1234-123456789012';$request['expected_version']='';Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($base.'/dashboard.zip'))]);$GLOBALS['activationFail']=true;rejected(fn()=>Software::execute($request),'Failed first activation removes new install');check(!is_dir($dashboardRoot)&&!\Emonks\Factory\ThemeRelease::dashboard()['network_active'],'No broken fresh install remains');$GLOBALS['activationFail']=false;
+  mkdir(WP_PLUGIN_DIR.'/websitebeheer');file_put_contents(WP_PLUGIN_DIR.'/websitebeheer/websitebeheer.php',"<?php\n/* Plugin Name: Emonks Dashboard\nVersion: 1.1.0\n*/");
+  check(\Emonks\Factory\ThemeRelease::dashboard()['slug']==='websitebeheer','Legacy folder discovered');
+  $legacy=$dashboard;$legacy['slug']='websitebeheer';$zip=new ZipArchive();$zip->open($base.'/legacy.zip',ZipArchive::CREATE);$sourceZip=new ZipArchive();$sourceZip->open($base.'/dashboard.zip');for($i=0;$i<$sourceZip->numFiles;$i++){$name=$sourceZip->getNameIndex($i);$zip->addFromString(str_replace('emonks-dashboard/','websitebeheer/',$name),$sourceZip->getFromIndex($i));}$sourceZip->close();$zip->close();$legacy['size']=filesize($base.'/legacy.zip');$legacy['sha256']=hash_file('sha256',$base.'/legacy.zip');
+  $request=['source'=>'source-test','upload'=>'72345678-1234-1234-1234-123456789012','meta'=>$legacy,'expected_version'=>'1.1.0'];Software::prepare($request);Software::asset($request+['offset'=>0,'bytes'=>base64_encode(file_get_contents($base.'/legacy.zip'))]);Software::execute($request);check(\Emonks\Factory\ThemeRelease::dashboard()['version']==='1.1.2'&&!is_dir($dashboardRoot),'Legacy install upgraded without duplicate');
+  mkdir($dashboardRoot);file_put_contents($dashboardRoot.'/websitebeheer.php',file_get_contents(WP_PLUGIN_DIR.'/websitebeheer/websitebeheer.php'));rejected(fn()=>\Emonks\Factory\ThemeRelease::dashboard(),'Duplicate dashboards rejected');
   echo "$n software checks passed.\n";
  }finally{$wp_filesystem->delete($base,true);}
 }

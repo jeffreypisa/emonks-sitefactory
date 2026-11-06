@@ -1,0 +1,47 @@
+<?php
+/** Run via wp eval-file in a fresh disposable single-site fixture, never a real site. */
+use Emonks\Factory\{Standalone,Handover,Package};
+if(getenv('EMSF_DISPOSABLE_TEST')!=='yes'||!str_contains(ABSPATH,'emsf-integration-handover-')||is_multisite()){throw new RuntimeException('Disposable standalone fixture required.');}
+$checks=0;$assert=static function($v,$message)use(&$checks){if(!$v){throw new RuntimeException('FAIL: '.$message);} $checks++;};
+$reject=static function(callable $fn,string $text)use($assert){try{$fn();}catch(Throwable $e){$assert(str_contains($e->getMessage(),$text),'Expected '.$text.', received '.$e->getMessage());return;}$assert(false,'Expected rejection: '.$text);};
+wp_set_current_user(1);
+// Fluent Forms creates a sample form on activation in this disposable fixture.
+global $wpdb; $wpdb->query("DELETE FROM {$wpdb->prefix}fluentform_forms"); $wpdb->query("DELETE FROM {$wpdb->prefix}fluentform_form_meta");
+$root=Standalone::storage();$dir=$root.'/incoming-'.wp_generate_uuid4();wp_mkdir_p($dir.'/files/media');
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=');file_put_contents($dir.'/files/media/test.png',$png);
+$base=['post_status'=>'publish','post_date'=>'2020-01-01 12:00:00','menu_order'=>0,'post_mime_type'=>'','post_excerpt'=>''];
+$m=['format'=>Package::FORMAT,'version'=>1,'theme'=>'skeletor','created_at'=>gmdate('c'),'source'=>'https://proposal.example.test/demo','dependencies'=>['theme_version'=>'1.0.0'],'models'=>[
+ ['key'=>'post_type_handover_service','post_type'=>'handover_service','title'=>'Services','active'=>true,'public'=>true,'show_ui'=>true,'supports'=>['title','editor'],'rewrite'=>['slug'=>'services']],
+ ['key'=>'taxonomy_handover_kind','taxonomy'=>'handover_kind','title'=>'Service groups','active'=>true,'public'=>true,'object_type'=>['handover_service']],
+ ['key'=>'group_handover_fields','title'=>'Service information','active'=>true,'fields'=>[['key'=>'field_handover_text','name'=>'description','label'=>'Description','type'=>'text']],'location'=>[[['param'=>'post_type','operator'=>'==','value'=>'handover_service']]]]
+], 'posts'=>[
+ ['ref'=>'post:page:home','post'=>$base+['post_type'=>'page','post_name'=>'home','post_title'=>'Home','post_content'=>'<a href="{{emsf:url:post:handover_service:advice}}">Advice</a>'],'parent'=>0,'meta'=>[],'terms'=>[]],
+ ['ref'=>'post:handover_service:advice','post'=>$base+['post_type'=>'handover_service','post_name'=>'advice','post_title'=>'Advice','post_content'=>'Our service.'],'parent'=>0,'meta'=>['description'=>['Custom field content'],'_description'=>['field_handover_text'],'_thumbnail_id'=>[['$ref'=>'post:attachment:test']]],'terms'=>['handover_kind'=>[['$ref'=>'term:handover_kind:consulting']]]],
+ ['ref'=>'post:attachment:test','post'=>array_replace($base,['post_type'=>'attachment','post_name'=>'test','post_title'=>'Picture','post_content'=>'','post_status'=>'inherit','post_mime_type'=>'image/png']),'parent'=>0,'meta'=>['_wp_attachment_image_alt'=>['Test image']],'terms'=>[],'file'=>'media/test.png']
+], 'terms'=>[['ref'=>'term:handover_kind:consulting','name'=>'Consulting','slug'=>'consulting','taxonomy'=>'handover_kind','description'=>'','parent'=>0]],'menus'=>[['ref'=>'menu:main','name'=>'Main','slug'=>'main','items'=>[['source_id'=>22,'parent_source_id'=>0,'title'=>'Advice','type'=>'post_type','object'=>'handover_service','object_ref'=>['$ref'=>'post:handover_service:advice'],'url'=>'{{emsf:url:post:handover_service:advice}}','target'=>'','classes'=>[],'xfn'=>'','position'=>1]]]],'options'=>['blogname'=>'Handover fixture','show_on_front'=>'page','page_on_front'=>['$ref'=>'post:page:home'],'permalink_structure'=>'/%postname%/'],'menu_locations'=>['primary'=>['$ref'=>'menu:main']],'forms'=>[],'files'=>['media/test.png'=>['sha256'=>hash('sha256',$png),'size'=>strlen($png)]],'unsupported'=>[]];
+$h=['format'=>Handover::FORMAT,'operation'=>wp_generate_uuid4(),'source'=>$m['source'],'target'=>'https://handover.example.test','approved_at'=>gmdate('c'),'approved_by'=>1,'fingerprint'=>Handover::fingerprint($m)];
+Package::json($dir.'/manifest.json',$m);$h['manifest_sha256']=hash_file('sha256',$dir.'/manifest.json');Package::json($dir.'/handover.json',$h);
+$zipfile=$root.'/fixture.zip';$zip=new ZipArchive();$zip->open($zipfile,ZipArchive::CREATE|ZipArchive::OVERWRITE);foreach(['manifest.json','handover.json','files/media/test.png'] as $file){$zip->addFile($dir.'/'.$file,$file);}$zip->close();
+$changed=$m;$changed['created_at']='old';$assert(Handover::fingerprint($m)===Handover::fingerprint($changed),'Fingerprint ignores export clock');$changed['posts'][0]['post']['post_title']='Changed';$assert(Handover::fingerprint($m)!==Handover::fingerprint($changed),'Fingerprint binds content');
+$reject(static fn()=>Handover::target('https://user:pass@example.test'),'HTTPS-adres');$reject(static fn()=>Handover::target('http://example.test'),'HTTPS-adres');
+$reject(static fn()=>Standalone::stage($zipfile,false),'hosting');
+$temp=wp_insert_post(['post_type'=>'page','post_status'=>'publish','post_title'=>'Existing fixture']);$staged=Standalone::stage($zipfile,true);$assert(get_post($temp)!==null,'Staging inventories existing content without deleting it');wp_delete_post($temp,true);
+$other=$m;$other['handover']=$h;$other['handover']['target']='https://wrong.example.test';$assert(Standalone::preflight($other)['ok'],'Package destination may differ from this installation before explicit import confirmation');
+$zip=new ZipArchive();$bad=$root.'/bad.zip';$zip->open($bad,ZipArchive::CREATE|ZipArchive::OVERWRITE);$zip->addFromString('../escape.php','<?php');$zip->close();$reject(static fn()=>Standalone::unpack($bad),'Onveilig');
+file_put_contents($dir.'/files/media/test.png','corrupt');$reject(static fn()=>Standalone::read($dir),'Ongeldig pakketbestand');file_put_contents($dir.'/files/media/test.png',$png);
+$r=Standalone::stage($zipfile,true);$assert($r['state']==='staged','Stage completed');$assert((int)get_option('blog_public')===0,'Noindex set');$assert(is_file(WPMU_PLUGIN_DIR.'/emonks-handover-guard.php'),'Independent guard installed');
+$reject(static fn()=>Standalone::apply('wrong'),'operatie');
+if(getenv('EMSF_TEST_STOP_AFTER_STAGE')==='yes'){echo "Fixture staged for hard interruption test.\n";return;}
+$fail=static function($data){if(($data['post_type']??'')==='handover_service'){throw new RuntimeException('Injected import failure');}return $data;};add_filter('wp_insert_post_data',$fail);
+$reject(static fn()=>Standalone::importWebsite($r['operation']),'Injected import failure');remove_filter('wp_insert_post_data',$fail);
+$assert(empty(Standalone::state()['committed']),'Failure not committed');$assert(is_file(WPMU_PLUGIN_DIR.'/emonks-handover-guard.php')&&(int)get_option('blog_public')===0,'Failed automatic import stays protected');$assert(get_posts(['post_type'=>'any','post_status'=>'any','numberposts'=>-1])===[],'Content transaction rolled back');
+$report=Standalone::apply($r['operation']);$assert($report['ok'],'Successful import report: '.implode('; ',$report['issues']));$assert($report['committed'],'Durable receipt committed');$assert(Standalone::state()['state']==='imported','Committed receipt reports completed import');
+$map=get_option('emsf_import_map');$id=$map['post:handover_service:advice'];$assert(get_post_meta($id,'description',true)==='Custom field content','ACF value retained');$assert(get_post_meta($id,'_thumbnail_id',true)===$map['post:attachment:test']||((int)get_post_meta($id,'_thumbnail_id',true)===$map['post:attachment:test']),'Media reference translated');
+$assert(str_contains(get_post($map['post:page:home'])->post_content,get_permalink($id)) && str_starts_with(get_permalink($id),'https://handover.example.test/'),'URL translated');$assert(count(wp_get_object_terms($id,'handover_kind'))===1,'Taxonomy relationship retained');
+$before=$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts}");Standalone::apply($r['operation']);$assert($before===$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts}"),'Retry after commit creates no duplicates');
+$reject(static fn()=>Standalone::stage($zipfile,true),'al geïmporteerd');
+$stored=Standalone::state();Standalone::removeTree($stored['dir']);$recovered=Standalone::stage($zipfile,true);$assert($recovered['committed']&&Standalone::report()['ok'],'Missing private package can be restored without content replacement');$assert($before===$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts}"),'Restoring package files does not reimport content');$reject(static fn()=>Standalone::release('wrong-operation'),'bedoelde import');
+wp_update_post(['ID'=>$id,'post_content'=>'Source leak: '.$m['source']]);$assert(!Standalone::report()['ok'],'Remaining source address detected');wp_update_post(['ID'=>$id,'post_content'=>'Our service.']);
+ob_start();Standalone::page();$html=ob_get_clean();$assert(str_contains($html,'Website activeren'),'Import UI offers separate launch');$assert(!str_contains($html,'name="checks['),'No manual quality checklist');
+$assert(count(get_posts(['post_type'=>'acf-post-type','post_status'=>'any','numberposts'=>-1]))===1,'Type definition stored in database');$assert(count(get_posts(['post_type'=>'acf-field-group','post_status'=>'any','numberposts'=>-1]))===1,'Field group stored in database');
+Package::json($root.'/fixture-result.json',['operation'=>$r['operation'],'id'=>$id,'checks'=>$checks]);echo "$checks handover integration checks passed.\n";

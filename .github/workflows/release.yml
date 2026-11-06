@@ -16,9 +16,22 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/check-release.py "$RELEASE_TAG"
       - name: Run updater configuration tests
-        run: php tests/update-policy.php
+        run: |
+          php tests/update-policy.php
+          php tests/handover-policy.php
+          php tests/handover-library.php
+          php tests/package-documents.php
+          php tests/package-known-metadata.php
+          php tests/handover-comments.php
+          php tests/delivery-software.php
+          php tests/publication-result.php
+          php tests/publication-result.php ajax
+          node tests/admin-check-feedback.cjs
+          php tests/archive-download.php
       - name: Build installable plugin
-        run: python3 scripts/build-zip.py
+        run: |
+          python3 scripts/build-zip.py
+          python3 scripts/build-importer.py
       - name: Publish stable release and installation ZIP
         env:
           GH_TOKEN: ${{ github.token }}

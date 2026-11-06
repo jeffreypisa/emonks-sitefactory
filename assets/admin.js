@@ -1,3 +1,10 @@
+// Both a manual check and a software update replace the same report and revision fields.
+function emsfRenderCheckResult(panel,data){
+   const output=panel?.querySelector('[data-check-results]');if(output&&data?.html){output.innerHTML=data.html;}
+   const changes=data?.changes||{};const revision=panel?.querySelector('[name="expected_revision"]');if(revision&&changes.token){revision.value=changes.token;}
+   const review=panel?.querySelector('[data-replace-review]');if(review){const required=Boolean(changes.token&&(!changes.known||changes.changed));review.hidden=!required;const checkbox=review.querySelector('input');checkbox.disabled=!required;checkbox.required=required;checkbox.checked=false;}
+   if(changes.token)panel?.querySelector('[data-check-first]')?.remove();
+}
 // Validate customer fields before the existing busy/submission handler runs.
 (function(){
  document.querySelectorAll('form[data-customer-form]').forEach(form=>{
@@ -28,10 +35,7 @@ document.addEventListener('submit',async function(event){
  async function poll(){if(stopped)return;try{const url=new URL(form.dataset.ajax);url.searchParams.set('action','emsf_progress');url.searchParams.set('site_id',data.get('site_id'));url.searchParams.set('nonce',data.get('_wpnonce'));const r=await fetch(url,{credentials:'same-origin',cache:'no-store'});const result=await r.json();const p=result.data;if(!stopped&&result.success&&p?.message&&Date.parse(p.at)>=started){text.textContent=p.message+(p.total?' '+p.done+' van '+p.total:'');if(p.total){meter.max=p.total;meter.value=p.done;}else{meter.removeAttribute('value');}}}catch(e){}if(!stopped)timer=setTimeout(poll,2000);}
  if(!['preflight','status'].includes(action))poll();
  try{const response=await fetch(form.dataset.ajax,{method:'POST',body:data,credentials:'same-origin'});const result=await response.json();stopped=true;clearTimeout(timer);meter.remove();text.textContent=result.data?.message||'Controleer de status voordat je opnieuw begint.';const link=document.createElement('a');link.href=result.data?.url||location.href;link.textContent=result.success?(action==='preflight'?'Controle bekijken en verdergaan':'Publicatie bekijken'):'Status en herstelopties bekijken';if(action==='preflight'||action==='status'){
-   const panel=form.closest('[role="tabpanel"]');const output=panel?.querySelector('[data-check-results]');if(output&&result.data?.html){output.innerHTML=result.data.html;}
-   const changes=result.data?.changes||{};const revision=panel?.querySelector('[name="expected_revision"]');if(revision&&changes.token){revision.value=changes.token;}
-   const review=panel?.querySelector('[data-replace-review]');if(review){const required=Boolean(changes.token&&(!changes.known||changes.changed));review.hidden=!required;const checkbox=review.querySelector('input');checkbox.disabled=!required;checkbox.required=required;checkbox.checked=false;}
-   if(changes.token)panel?.querySelector('[data-check-first]')?.remove();
+   const panel=form.closest('[role="tabpanel"]');emsfRenderCheckResult(panel,result.data);
    if(!result.data?.html)box.append(link);
   }else{box.append(link);if(result.success)location.assign(link.href);}}
  catch(e){const checking=['preflight','status'].includes(action);text.textContent=checking?'De controle is afgebroken. Er is geen publicatie gestart. Herlaad de pagina en controleer opnieuw.':'De verbinding is onderbroken. De publicatie kan online nog lopen. Controleer eerst de status.';const link=document.createElement('a');link.href=location.href;link.textContent=checking?'Pagina herladen en opnieuw controleren':'Terug naar publicatiestatus';box.append(link);}
@@ -106,13 +110,28 @@ document.addEventListener('click', async event => {
  }
  if(panel.dataset.softwareBusy)return;panel.dataset.softwareBusy='1';
  const buttons=panel.querySelectorAll('button,input[type="submit"]');buttons.forEach(item=>item.disabled=true);
- const note=document.createElement('p');note.setAttribute('role','status');note.textContent='Lokale software verzamelen en online bijwerken…';button.closest('[data-check-results]').prepend(note);
+ form.querySelectorAll('.emsf-progress').forEach(item=>item.remove());
+ const note=document.createElement('p');note.className='emsf-progress';note.setAttribute('role','status');note.textContent='Lokale software verzamelen en online bijwerken…';form.append(note);
  data.set('action','emsf_software');data.set('component',button.dataset.software);
  try{
   const response=await fetch(form.dataset.ajax,{method:'POST',body:data,credentials:'same-origin'});const result=await response.json();
   if(!result.success)throw new Error(result.data?.message||'Bijwerken mislukt. Controleer de online status.');
-  if(result.data.html)panel.querySelector('[data-check-results]').innerHTML=result.data.html;
-  const success=document.createElement('p');success.setAttribute('role','status');success.textContent=result.data.message;panel.querySelector('[data-check-results]').prepend(success);
+  emsfRenderCheckResult(panel,result.data);
+  note.textContent=result.data.message;
  }catch(error){note.textContent=error.message||'Verbinding onderbroken. Controleer online de versie vóór opnieuw bijwerken.';}
  finally{delete panel.dataset.softwareBusy;buttons.forEach(item=>item.disabled=false);}
+});
+
+// Native form submission keeps the package action simple, with immediate busy feedback.
+document.addEventListener('submit',event=>{
+ const form=event.target;if(!form.matches('[data-handover-prepare]'))return;
+ if(form.dataset.busy){event.preventDefault();return;}
+ form.dataset.busy='1';form.setAttribute('aria-busy','true');
+ form.querySelectorAll('[type="submit"]').forEach(button=>{button.disabled=true;if(button.tagName==='INPUT')button.value='Pakket wordt klaargezet…';else button.textContent='Pakket wordt klaargezet…';});
+ const status=document.createElement('span');status.setAttribute('role','status');status.textContent='Controleren en inpakken…';form.append(status);
+});
+window.addEventListener('pageshow',()=>{
+ document.querySelectorAll('[data-handover-prepare]').forEach(form=>{
+  delete form.dataset.busy;form.removeAttribute('aria-busy');form.querySelectorAll('[type="submit"]').forEach(button=>{button.disabled=false;if(button.tagName==='INPUT')button.value='Pakket klaarzetten';else button.textContent='Pakket klaarzetten';});form.querySelectorAll('[role="status"]').forEach(status=>status.remove());
+ });
 });

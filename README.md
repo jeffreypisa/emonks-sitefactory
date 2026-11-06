@@ -1,6 +1,6 @@
 # Emonks Site Factory
 
-WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.14.2 — hostingpilot vereist**.
+WordPress Multisite-plugin voor lokale Skeletor-concepten en afzonderlijke privépublicatie naar een online voorstelnetwerk. Versie **0.25.6 — hostingpilot voor zelfstandige oplevering vereist**.
 
 Beheer via **Netwerkbeheer → Site Factory → Alle sites**: lokaal concept aanmaken, per site publiceren/vervangen, klanttoegang handmatig delen, e-mail uit/aan, archiveren en herstellen. Geen bulkpublicatie. Nieuwe voorstellen starten met e-mail uit. Accountaanmaak/publicatie versturen geen WordPress-mail, ook wanneer normale site-mail is aangezet.
 
@@ -10,7 +10,7 @@ Nieuw in 0.4: viertekens-previewcodes met raadlimiet, unieke deellinks die de co
 
 1. Gebruik PHP 8.1 of nieuwer, WordPress Multisite, InnoDB en een schrijfbare persistente private opslagmap buiten alle webroots.
 2. Installeer het eigen **Skeletor-thema** en **ACF Pro** afzonderlijk. Dezelfde Skeletor-versie en gecontroleerde themabestanden moeten op beide netwerken staan. ACF- en Fluent Forms-versienummers hoeven niet gelijk te zijn; de benodigde plugins moeten wel beschikbaar zijn. Installeer Fluent Forms netwerkbreed wanneer de inhoud formulieren bevat; Pro en licenties alleen wanneer nodig. Deze afhankelijkheden worden niet meegeleverd.
-3. Bouw de installeerbare zip met `python3 scripts/build-zip.py`. Upload `dist/emonks-site-factory-0.14.0.zip` via Netwerkbeheer → Plugins en activeer netwerkbreed. Of plaats de repository-root als `wp-content/plugins/emonks-site-factory`.
+3. Bouw de installeerbare zip met `python3 scripts/build-zip.py`. Upload `dist/emonks-site-factory-0.25.6.zip` via Netwerkbeheer → Plugins en activeer netwerkbreed. Of plaats de repository-root als `wp-content/plugins/emonks-site-factory`.
 4. Configureer uitsluitend de passende modus in `wp-config.php`, vóór WordPress wordt geladen. Bewaar configuratie, opslag en credentials buiten Git. Zie [installatie, privacy en hostingcontroles](docs/ONLINE.md).
 5. Lokaal: open Sites. Online: verbind pas na hostingcontroles en doe eerst een wegwerppilot. Openbare voorstellen blijven een voorstelomgeving, geen live-klantsitemodus.
 
@@ -211,7 +211,7 @@ Alles controleren haalt eerst de omgevingsgegevens op. Bij een ongeschikt of ver
 
 Vanaf 0.14.0 controleert de ingebouwde Plugin Update Checker 5.7 op stabiele releases in [jeffreypisa/emonks-sitefactory](https://github.com/jeffreypisa/emonks-sitefactory). De repository is openbaar; er is geen token of extra updaterplugin nodig. WordPress toont updates op de pluginpagina en bij Dashboard → Updates. Bij Multisite werk je plugins bij via Netwerkbeheer. Automatische updates worden niet ongevraagd ingeschakeld.
 
-Installeer deze eerste versie met updater één keer handmatig met `dist/emonks-site-factory-0.14.0.zip`. Eerdere versies herkennen GitHub-updates nog niet. Behoud het hoofdbestand `emonks-site-factory.php` en vervang dezelfde bestaande plugin; activeer geen tweede kopie ernaast. De updater behoudt bij volgende updates de bestaande pluginmap, ook als die van de repositorynaam afwijkt.
+Installeer deze eerste versie met updater één keer handmatig met `dist/emonks-site-factory-0.20.0.zip`. Eerdere versies herkennen GitHub-updates nog niet. Behoud het hoofdbestand `emonks-site-factory.php` en vervang dezelfde bestaande plugin; activeer geen tweede kopie ernaast. De updater behoudt bij volgende updates de bestaande pluginmap, ook als die van de repositorynaam afwijkt.
 
 Nieuwe releases maken:
 
@@ -244,3 +244,158 @@ Lokale Git-werkmappen (ook worktrees met een `.git`-bestand) voeren geen periodi
 ### 0.14.2
 
 - Herstelkopieën controleren opgeslagen JSON met SHA-256 zonder de volledige databasekopie opnieuw te decoderen. Dit verlaagt de geheugenpiek vóór verwijderen of vervangen. Back-ups vragen de WordPress-beheergeheugenlimiet aan. Onvolledige schrijfacties worden geweigerd vóór de definitieve journalwissel.
+
+## 0.14.3 — themapakket met Composer-tools
+
+De lokale softwareoverdracht sluit `vendor/bin/` uit van het themapakket. Composer plaatst daar snelkoppelingen naar ontwikkeltools; die blokkeerden het verzamelen van het thema met “Een runtimebestand is een symbolische link.” Echte runtimebestanden met symbolische links blijven geweigerd. Deze correctie is lokaal nodig om het thema opnieuw online bij te werken; de online ontvanger hoeft hiervoor niet vooraf bijgewerkt te worden.
+
+## 0.14.4 — bestaande hero- en mediawaarden overdragen
+
+De inhoudsexport behoudt de oude scalars `hero_image_opacity_mode` (leeg/inherit/custom) en `hero_image_opacity` (leeg of 0–100), zonder deze op huidige hero-instellingen toe te passen. Voor afbeeldingen blijven `_emonks_capture_date` (geldige kalenderdatum), `_emonks_generated_concept` (0/1) en `_emonks_capture_source` (live/archive) behouden. Andere onbekende metadata en ongeldige waarden blijven blokkeren. De brongegevens worden niet gewijzigd.
+
+Het controleresultaat benoemt een voltooide eerdere inhoudspublicatie als historie en verwijst bij exportproblemen naar de onderstaande meldingen. Werk de Site Factory-plugin lokaal en online bij en kies Alles controleren; er wordt hierbij geen inhoud vervangen.
+
+
+## 0.15.0 — Emonks Dashboard controleren en synchroniseren
+
+Alles controleren vergelijkt nu afzonderlijk de lokale en online versie van Emonks Dashboard en controleert de netwerkactivatie. Een ontbrekende, oudere of niet netwerkactieve installatie blokkeert de publicatiecontrole met een gerichte vervolgstap. Een nieuwere online versie wordt nooit gedowngraded.
+
+Werk eerst de Site Factory-plugin online bij. Daarna verschijnt **Emonks Dashboard online synchroniseren** bij het controleresultaat. De actie draagt uitsluitend de runtimebestanden van de lokale dashboardplugin over en activeert deze netwerkbreed; instellingen en klantinhoud blijven behouden. De bestaande dashboardmap wordt herkend, ook wanneer die `websitebeheer` heet. Dubbele installaties worden geweigerd. Bij een bestaande installatie wordt vooraf een private herstelkopie gemaakt; bij een installatiefout of mislukte netwerkactivatie worden bestanden en de eerdere netwerkactivatie hersteld. Een afzonderlijk statusverzoek bevestigt daarna versie én netwerkactivatie.
+
+Dit is een bewuste softwareactie vanuit Site Factory, zonder automatische achtergronddeployment. De lokale centrale Git-bron blijft behouden. Tests: `tests/software-update.php`, `tests/environment-checks.php` en `tests/preflight-environment.php`.
+
+
+## 0.15.1 — Ondertekst zichtbaar onder de lokale demobalk
+
+De lokale demobalk gebruikt sticky-positionering en houdt daardoor eigen ruimte onder de pagina vrij. De melding blijft tijdens scrollen zichtbaar en de onderkant van de footer wordt niet meer afgedekt, ook als de melding op mobiel over meerdere regels loopt.
+
+## 0.16.0 — zelfstandige WordPress opleveren
+
+- Apart onderdeel Oplevering op lokale en online voorstellen: expliciete bronkeuze, definitief domein, onveranderlijk inhoudspakket en versiegebonden goedkeuring. Bronwijzigingen maken het pakket verouderd; goedkeuren/downloaden vergelijken de inhoud opnieuw.
+- Tijdelijke importplugin rechtstreeks downloaden en installeren op een lege zelfstandige WordPress-installatie. Controle van afhankelijkheden, doeladres, inhoud, bestanden en opslag vóór import; ACF-projectmodellen worden onafhankelijk in de database opgeslagen.
+- Herhaalbare import met vaste operatiecode, één inhoudstransactie en een atomair opgeslagen voltooiingsbewijs. Afzonderlijke tijdelijke opleverbeveiliging blijft actief bij deactivatie van de importer. Bewuste beheerdersproef voor formulieren, controlelijst, afzonderlijke livegang en bewaard opleverrapport.
+- Geen automatische hostingaanmaak, DNS-wijziging, klantaccountoverdracht of inhoudssynchronisatie naar live. De live-installatie werkt na afronding zonder Site Factory of importplugin.
+
+Volledige werkvolgorde, herstel en grenzen: [Zelfstandige WordPress opleveren](docs/OPLEVERING.md).
+
+## 0.16.1 — Word-downloads overdragen
+
+DOCX-bestanden uit de mediabibliotheek gaan mee bij export, online publicatie, terughalen en zelfstandige oplevering. De bronbestanden blijven intact; pad- en controlesomcontroles blijven gelden. De foutmelding bij andere niet-ondersteunde bestanden verwijst nu naar bestandstype én bestandsnaam. Werk Site Factory lokaal en online bij vóór een nieuwe publicatie met DOCX.
+
+## 0.16.2 — lokale importmarkeringen buiten inhoudspakketten
+
+De tijdelijke bijlagemarkeringen `_sdda_logo_hash` en `_sdda_form_hash` uit eerdere bouwscripts gaan niet mee in inhoudsexports. Zij dienen uitsluitend lokale herkenning van al geïmporteerde bestanden. Lokale waarden, logo’s, documenten en inhoudsverwijzingen blijven behouden. Andere onbekende metadata blijft blokkeren. Alleen lokaal bijwerken is nodig om deze exportblokkade op te lossen; DOCX-overdracht vereist daarnaast minimaal 0.16.1 online.
+
+## 0.16.3 — reacties in de prullenbak blokkeren oplevering niet
+
+De oplevercontrole telt alleen reacties buiten spam/prullenbak die niet bij een bericht in de prullenbak horen. Reacties in spam of de prullenbak blijven ongewijzigd op de bronwebsite en worden niet overgedragen; de Oplevering-tab toont hun aantal. Actieve, onbeoordeelde en verweesde reacties blijven blokkeren met een gerichte verwijzing naar Reacties. Een mislukte reactiecontrole blokkeert eveneens. Geen wijzigingen aan Skeletor of sitespecifieke regels.
+
+## 0.16.4 — duidelijke stappen en downloadknop
+
+Oplevering toont per fase één duidelijke hoofdactie: Maak en controleer pakket → Keur pakket goed → Download pakket. Na goedkeuring staat Download pakket bovenaan als opvallende knop met gereedmelding. Opnieuw maken en pakketgegevens staan ingeklapt; Download importplugin is herkenbaar een afzonderlijk hulpmiddel. De importer benoemt uploaden, importeren, hervatten, testmail, vrijgeven en opruimen met actieve werkwoorden. De bestaande controles en goedkeuringsstappen blijven gelijk.
+
+## 0.17.0 — thema en plugins in het opleverpakket
+
+Nieuwe zelfstandige opleverpakketten bevatten naast inhoud en media ook de runtime van het actieve Skeletor-thema, ACF Pro en Emonks Dashboard. Bij formulieren gaan Fluent Forms en de actieve Pro-uitbreiding mee. De volledige Factory/netwerkpluginset wordt niet gekopieerd. Het overzicht toont namen en versies. Deze privésoftware staat uitsluitend in het per-site opleverpakket; de openbare Factory- en importerreleases leveren geen premium plugins mee.
+
+De importer accepteert het pakket zonder vooraf geïnstalleerde ACF/thema. Na upload volgt **Installeer thema en plugins**, daarna **Importeer pakket**. Iedere softwarezip wordt gecontroleerd op identiteit, versie, controlesom, bestandspaden en limieten voordat code wordt geplaatst. Alleen ontbrekende software wordt toegevoegd; bestaande installaties met een andere versie, afwijkende bestanden of dubbele identiteit worden niet overschreven. Herhalen kan dezelfde operatie hervatten. Fluent Forms krijgt zijn schema via de publieke migratiemethoden zonder een demoformulier te maken. Na installatie laadt een nieuw verzoek de software voordat de inhoud wordt geïmporteerd.
+
+Werk ook de tijdelijke importer op de bestemming bij en maak een nieuw pakket: eerdere pakketten bevatten geen software. Licentiecodes, accounts, SMTP-/API-geheimen en hostinginstellingen blijven apart. De bestemming moet leeg zijn, inclusief verwijderde WordPress-voorbeeldinhoud. Andere siteplugins en hun gegevens vereisen nog steeds de bestaande ondersteuning/inventarisatie; dit is geen kopie van alle netwerkplugins.
+
+
+## 0.17.1 — standaardbericht definitief verwijderen
+
+Bij het aanmaken van een nieuw lokaal Factory-concept wordt uitsluitend het door WordPress aangemaakte eerste standaardbericht (Hallo wereld!/Hello world!) direct definitief verwijderd. Het komt niet in de prullenbak terecht. Dit gebeurt vóór het opbouwen van site-inhoud en niet als periodieke opschoonactie; eigen berichten en bestaande sites blijven intact.
+
+## 0.17.1 — klaarzetten en downloaden
+
+Oplevering heeft twee acties: **Pakket klaarzetten** en **Download pakket**, zonder genummerde stappen of aparte pakketgoedkeuring. Klaarzetten voert de bestaande inhouds-, software-, checksum- en consistentiecontroles uit en legt de bronversie, beheerder en het moment vast als pakketprovenance. Dit is geen klantgoedkeuring en publiceert niets. Downloaden controleert opnieuw of de bron nog overeenkomt. Oude goedgekeurde pakketten blijven leesbaar; nieuwe pakketten bewaren `ready_at`/`ready_by` zonder aparte goedkeuringsregistratie. De versie-1-transportvelden `approved_at`/`approved_by` blijven als technische aliassen aanwezig zodat bestaande importers de pakketten blijven lezen. De site-/klantfase wordt niet veranderd.
+
+## 0.17.2 — actuele controlemelding na software-update
+
+Een software-update vervangt de oude voortgangsmelding door het resultaat van de nieuwe controle. Kopmelding, controleresultaat en revisie-/wijzigingsvelden komen uit hetzelfde rapport. Daardoor blijft een eerder bericht over aandachtspunten niet naast een geslaagde controle staan. De beheerassets gebruiken de actuele pluginversie voor cacheverversing. De publicatie- en bevestigingscontroles blijven intact.
+
+## 0.17.3 — grote pakketten zonder geheugenfout downloaden
+
+Pakket-, importer- en pluginzipdownloads versturen bestanden in blokken van 1 MiB met een exacte Content-Length. Verwijderbare PHP-uitvoerbuffers worden vóór de download gesloten, zodat een compleet softwarepakket niet in het PHP-geheugen wordt opgebouwd. Dit voorkomt dat een geheugenfout als klein `.zip`-bestand wordt opgeslagen. De pakketinhoud verandert niet. Een wijziging van uitsluitend het Factory-generatorversienummer maakt een klaarstaand pakket niet meer onnodig verouderd; inhoud, instellingen en gebundelde software blijven op wijzigingen gecontroleerd.
+
+## 0.19.0 — pakketoverzicht
+
+Oplevering toont bovenaan het websiteadres met **Pakket klaarzetten**. Volledig opgebouwde pakketten blijven daaronder bewaard, nieuwste eerst, met datum, bestemming, grootte, **Downloaden** en **Verwijderen**. Oude momentopnamen blijven downloadbaar na bronwijzigingen; downloaden controleert het opgeslagen bestand zonder nieuwe export. Verwijderen biedt ongedaan maken; verwijderde bestanden worden bij een volgende pakketactie na 30 dagen opgeruimd. Technische gegevens staan in een gesloten log. Bestaande pakketten blijven beschikbaar. De gedeelde themacode verandert niet.
+
+## Nieuw in 0.19.0
+
+De zelfstandige importer gebruikt het adres van de doelinstallatie en toont het geplande pakketadres daarnaast; een afwijkende bestemming vraagt bevestiging. Bestaande inhoud kan via een apart overzicht worden vervangen. Alleen herkende ongewijzigde WordPress-voorbeeldinhoud kan afzonderlijk worden opgeruimd. Vóór het verwijderen komt er een geverifieerde, downloadbare private herstelkopie; verwijderen en importeren delen één transactie. Media worden pas na een bevestigde import opgeruimd. Accounts blijven behouden, ook bij herstellen. Hostingafscherming is expliciet een bevestiging van een elders ingestelde beveiliging. Zie docs/OPLEVERING.md voor bereik en herstelgrenzen.
+
+Gerichte controles: vervanging en herstel met synthetische WordPress-inhoud, formulieren, media en accounts; gewijzigde bevestiging geweigerd; daadwerkelijk opgeslagen doeladres en interne links; corrupte herstelkopie geweigerd; harde processtop gevolgd door rollback, hervatten en herstel. Lokale tests vervangen de nog benodigde hostingpilot niet.
+
+## Nieuw in 0.19.1
+
+Lokaal bekijken en Online bekijken openen in een nieuw tabblad, zowel in Alle sites als in het sitepaneel. Het beheerscherm blijft daardoor beschikbaar.
+
+## 0.20.0 — compacte import en activering
+
+De tijdelijke importplugin toont één volgende hoofdactie, met herstelkopie, testen en technische gegevens ingeklapt. De handmatige opleverchecklist vervalt; **Website activeren** voert de bestaande automatische controles uit en registreert uitsluitend de activering. Het rapport presenteert geen niet-uitgevoerde kwaliteitscontroles als afgerond. Voor bestaande inhoud blijven toestemming, een gebonden inhoudsinventaris en automatische herstelkopie vereist. De overbodige vervangmoduskeuze vervalt; WordPress-voorbeeldinhoud wordt herkend. Formulieren tonen voortgang tijdens upload/installatie/import. Deze wijziging raakt uitsluitend de plugin.
+
+## 0.21.0 — websitemeldingen afzonderlijk verbergen
+
+Onder **Netwerkbeheer → Site Factory → Meldingen → Meldingen op de website** staat de schakelaar **Meldingen op de website tonen**. Deze geldt voor alle voorstelwebsites in het online netwerk en verbergt beide footerberichten over e-mail en activiteitsregistratie. Bestaande installaties blijven de teksten tonen totdat de schakelaar wordt uitgezet. Opslaan staat los van het ontvangstadres en verandert geen mailblokkade, formuliercontroles, activiteitsregistratie of meldingen aan de maker. Uitleg op login- en toegangsschermen blijft beschikbaar. Installeer deze pluginuitgave online om de instelling daar te gebruiken.
+
+## 0.22.0 — blijvend opslaan en websitemeldingen per site
+
+De centrale checkbox onder **Site Factory → Meldingen** bewaart ook de eerste keuze voor uitgeschakelde websitemeldingen. De instelling gebruikt expliciete `0`/`1`-waarden, zodat WordPress een eerste uitgeschakelde keuze niet als een ontbrekende optie behandelt. Bestaande opgeslagen keuzes blijven geldig.
+
+Onder **Site Factory → kies de site → Activiteit → Meldingen op de website** kies je **Standaard volgen (Tonen/Verbergen)**, **Tonen** of **Verbergen**. De keuze geldt alleen voor de online site; via de lokale Site Factory gaat dezelfde actie over de bestaande online verbinding. Sites zonder eigen keuze volgen de centrale standaard, ook na latere wijzigingen. Expliciete sitekeuzes blijven behouden. Deze weergavekeuze verandert geen mailblokkade, formuliercontrole, activiteitsregistratie, ontvanger of meldingen aan de maker. Opslaan verstuurt geen mail en publiceert geen inhoud. Voor instellen vanuit lokaal is Site Factory 0.22.0 ook online vereist; de statuscontrole ververst de getoonde standaard en keuze.
+
+
+## 0.23.0 — automatisch activeren na zelfstandige import
+
+Gebruikerskeuze van 29 oktober 2026: een overgezette zelfstandige website moet na een geslaagde import direct werken. **Website importeren en activeren** maakt de herstelkopie, importeert de inhoud, voert de automatische eindcontrole uit en geeft daarna bezoekers, mail, HTTP-integraties, cron en indexering vrij. De tijdelijke beveiliging blijft actief tijdens import en bij fouten. Hervatten slaat reeds bevestigde inhoud over en herhaalt alleen de noodzakelijke afronding; het rapport registreert `release_mode: automatic`, zonder handmatige kwaliteitsverklaringen. Alleen deze importactie activeert automatisch: een pluginupdate of het openen van de beheerpagina publiceert geen bestaande wachtende import. De losse activeringsknop blijft beschikbaar voor oude of onderbroken imports. Hostingafscherming en DNS blijven apart beheerd. Geen themawijziging.
+
+## Nieuw in 0.23.1
+
+De oplevercontrole herkent WooCommerce-bestelnotities en benoemt de benodigde afzonderlijke webshopoverdracht. Deze worden niet meer als gewone reacties aangeduid. De blokkade blijft behouden: deze uitgave voegt geen WooCommerce-export toe en verwijdert geen bestellingen of notities. Ook gemengde reacties en verweesde bestelnotities blijven beschermd.
+
+## Volledige zelfstandige export (0.24.0)
+
+Nieuwe opleverpakketten bevatten de eigen sitetabellen, oorspronkelijke IDs, uploads, afgeschermde WooCommerce-downloads, actieve siteplugins en benodigde netwerkplugins inclusief site-instellingen. Bestellingen, bestelnotities, downloadrechten, voorraad, varianten, redirects en Fluent Forms-inzendingen/integraties gaan mee. Installeer met de gelijknamige 0.24.0-importer op een lege zelfstandige WordPress-installatie. Netwerkbeheerders, Factory-verbindingen, andere sites en oude taakqueues blijven buiten het pakket. Sitegebonden verbindingsgegevens maken het pakket vertrouwelijk. Zie [Oplevering](docs/OPLEVERING.md).
+
+## Hervatbare pakketupload (0.24.1)
+
+Grote opleverpakketten worden via de tijdelijke importer in delen van maximaal 4 MiB verstuurd, met voortgang en hervatten in dezelfde browser. Een verloren antwoord voegt geen dubbele bytes toe. Uploadbestanden staan privé, zijn aan beheerder en installatie gebonden en worden volledig gevalideerd vóór installatie. De bestaande volledige 0.24.0-pakketten blijven bruikbaar; werk alleen de tijdelijke importplugin bij. Dit verhelpt de grote enkele uploadaanvraag, niet eventuele afzonderlijke tijdslimieten tijdens uitpakken of inhoudsimport.
+
+## SiteGround-bestemming (0.24.2)
+
+Een lege SiteGround-installatie kan al beveiligingslogs bevatten. De bestemmingscontrole behoudt daarom de twee bekende tabellen `sgs_log_events` en `sgs_log_visitors`, uitsluitend als het inkomende pakket deze niet vervangt. Actieve Security Optimizer en Speed Optimizer blijven actief. Eigen inhoud, bestellingen, inzendingen en onbekende plugingegevens blijven beschermd; een blokkade noemt nu de betreffende tabel. Bestaande pakketten blijven bruikbaar en een voltooide deelupload kan in dezelfde browser worden hervat na het bijwerken van de importer.
+
+## Bestaande WordPress-inhoud bekijken en vervangen (0.24.3)
+
+Het uploaden van een volledig pakket blokkeert niet langer uitsluitend omdat bestaande WordPress-pagina’s, media, termen of reacties niet exact als standaardvoorbeeld zijn herkend. De importer bewaart een herstelkopie, toont de aanwezige inhoud en vereist vóór inhoudsvervanging een expliciete bevestiging die aan de actuele inventarisatie is gebonden. Zonder die keuze wordt geen inhoud verwijderd. Oude niet hergebruikte uploads worden pas na commit opgeruimd; bronbestanden en fonts uit de volledige export blijven behouden. Echte webshopbestellingen (HPOS én legacy), downloadrechten en onbekende plugingegevens blijven blokkerend.
+
+## Automatisch installeren met eigen back-up (0.25.0)
+
+Gebruikersinstructie 2 november 2026: de beheerder maakt vóór het gebruik van de importplugin zelf een back-up. De importer maakt daarom standaard geen extra herstelkopie en vraagt geen aanvullende inhouds- of adresbevestigingen. Na upload volgen software-installatie, inhoudsvervanging en activering automatisch in afzonderlijke verzoeken. Het pakket is leidend voor de overgedragen tabellen en inhoud. Technische integriteits-, rechten-, opslag- en consistentiecontroles blijven actief; databasefouten worden transactioneel teruggedraaid en dezelfde operatie kan worden hervat. Bestaande complete exports blijven geldig. Dit verandert niet de aparte herstelkopieën bij software-updates of publicatie in het voorstelnetwerk.
+
+### 0.25.1
+
+Vernieuwt WooCommerce-attributen- en productcaches na een volledige import, zodat de bij plugininstallatie gecachte lege maatlijst niet blijft staan. Bestaande volledige pakketten blijven bruikbaar.
+
+### 0.25.2 — downloadlinks bij afwijkend Multisite-uploadadres
+
+Volledige import zet uploadlinks zowel vanaf het netwerkadres als vanaf het subsiteadres om naar de uploadmap van de zelfstandige bestemming. Dit voorkomt dat onder meer PDF-maattabellen naar een achtergebleven `/uploads/sites/{id}/`-pad verwijzen wanneer WordPress bij export het netwerkadres voor uploads retourneert. De bestanden zaten al in het pakket; de verwijzingen worden nu correct omgezet. Bestaande volledige pakketten zijn bruikbaar met importer 0.25.2. Bestaande websites worden niet automatisch opnieuw geïmporteerd.
+
+## Nieuw in 0.25.3
+
+Het online beheer gebruikt voor directe site-acties de actieve themamap van de gekozen, gevalideerde subsite. Preview & klanttoegang blokkeert daardoor niet meer op de standaardmap `skeletor` wanneer het geïnstalleerde thema bijvoorbeeld `skeletor-master` heet. De lokale verbindingsinstelling blijft ongewijzigd; er worden geen thema’s hernoemd of geactiveerd en de toegangsmodus verandert niet door installatie. Installeer deze update ook op het online netwerk.
+
+## Nieuw in 0.25.4
+
+Anonieme bezoeken aan gewone wp-admin-pagina’s gaan via WordPress naar het inlogscherm met behoud van de terugkeerbestemming. De voorstelafscherming blokkeert deze inlogroute niet meer voortijdig. Dit geldt voor openbare en afgeschermde voorstellen. AJAX-, REST-, admin-post- en uploadverzoeken houden hun bestaande afscherming; ingelogde gebruikers zonder toegang tot de site blijven geweigerd. Installeer de update ook online.
+
+## Nieuw in 0.25.5
+
+Inhoudsimport behoudt de nieuwe menukoppelingen na een thema-activatie. De import verwijdert de oude, uitgestelde WordPress-menutoewijzing binnen dezelfde transactie, zodat de volgende pagina-aanvraag geen verwijzingen naar verwijderde menu’s terugzet. Geldt ook voor herhaalde publicatie en hervatten. Bestaande ongeldige koppelingen worden niet automatisch gewijzigd. Installeer deze update ook online.
+
+## Nieuw in 0.25.6
+
+Nieuwe online voorstellen starten standaard met E-mail aan (gebruikerskeuze 5 november 2026). Lokale concepten blijven standaard op E-mail uit. Bestaande mailkeuzes blijven bij updates, vervangen en hervatten behouden; wijzig die per site via Mails maken → Automatische e-mail per omgeving → ONLINE. Accountaanmaak en publicatie blijven zonder mail. Aan zetten herhaalt geen eerder onderdrukte berichten en configureert geen formulierontvangers of mailtransport.

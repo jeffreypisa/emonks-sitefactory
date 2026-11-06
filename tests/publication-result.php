@@ -36,11 +36,16 @@ namespace {
         require $root.'/Admin.php';
         $render=new \ReflectionMethod(\Emonks\Factory\Online\Admin::class,'result');
     }
+    foreach([true,false] as $ready){
+        $feedback=\Emonks\Factory\Online\Publication::checkFeedback(['ok'=>$ready,'changes'=>['token'=>'fresh-revision','known'=>true,'changed'=>false]],true);
+        if(str_contains($feedback['message'],'Gereed voor publicatie.')!==$ready||$feedback['check_ok']!==$ready||$feedback['changes']['token']!=='fresh-revision'){throw new \RuntimeException('Software update must use the latest report and revision.');}
+        echo 'Software feedback: '.($ready?'ready':'issues')." OK\n";
+    }
     $cases=[
         'completed publication'=>[['publication_check'=>true,'operation'=>['status'=>'complete']],false,'Publicatie voltooid.'],
         'status capability'=>[['publication_check'=>true,'protocol'=>4],false,'Publicatie voltooid.'],
         'no report'=>[[],false,'Publicatie voltooid.'],
-        'successful preflight'=>[['publication_check'=>['ok'=>true]],true,'Controle afgerond. Bekijk hieronder het resultaat.'],
+        'successful preflight'=>[['publication_check'=>['ok'=>true]],true,'Controle afgerond. Gereed voor publicatie.'],
         'failed preflight'=>[['publication_check'=>['ok'=>false,'issues'=>['Testblokkade']]],true,'Controle afgerond: er zijn nog aandachtspunten.'],
     ];
     foreach($cases as $name=>[$fixture,$hasReport,$message]) {

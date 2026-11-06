@@ -38,8 +38,9 @@ final class Admin {
         $screen=get_current_screen();
         if(!str_starts_with((string)($_GET['page']??''),'emsf-')){return;}
         $base=plugins_url('assets/',dirname(__DIR__,2).'/emonks-site-factory.php');
-        wp_enqueue_style('emsf-admin',$base.'admin.css',[],'0.13.1');
-        wp_enqueue_script('emsf-admin',$base.'admin.js',[],'0.13.1',true);
+        $version=\Emonks\Factory\ThemeRelease::pluginVersion();
+        wp_enqueue_style('emsf-admin',$base.'admin.css',[],$version);
+        wp_enqueue_script('emsf-admin',$base.'admin.js',[],$version,true);
     }
     private static function protect(): void {
         Sites::requireAdmin();nocache_headers();if(!headers_sent()){header('Referrer-Policy: no-referrer');}
@@ -72,7 +73,7 @@ final class Admin {
     private static function activeTab(): string {
         $tab=(string)($_POST['return_tab']??$_GET['tab']??'publicatie');
         $tab=['mail'=>'email','archive'=>'beheer','unarchive'=>'beheer','delete'=>'beheer'][$tab]??$tab;
-        if(!in_array($tab,['ophalen','publicatie','opvolging','toegang','gebruikers','activiteit','email','beheer'],true)){$tab='publicatie';}
+        if(!in_array($tab,['oplevering','ophalen','publicatie','opvolging','toegang','gebruikers','activiteit','email','beheer'],true)){$tab='publicatie';}
         return !Sites::local()&&$tab==='publicatie'?'toegang':$tab;
     }
     private static function panel(string $tab): string {
@@ -149,8 +150,8 @@ final class Admin {
             $status=!empty($bound['deleted'])?'Online verwijderd':(!empty($bound['site'])?($states[$bound['state']??'']??'Online status controleren'):'Lokaal concept');
             if(($bound['state']??'')==='ready'&&isset($bound['preview_mode'])){$status.=$bound['preview_mode']==='public'?' · zonder code':($bound['preview_mode']==='code'?' · met code':' · alleen ingelogd');}
             if($pending){$status='Publicatie open — hervatten';}if($site->archived){$status=$local?'Lokaal gearchiveerd · '.$status:'Online gearchiveerd';}
-            echo '<tr data-site-id="'.$id.'" data-connected="'.($local&&(!empty($bound['site'])||$pending)?'1':'0').'"><td><strong><a href="'.esc_url(Sites::url($id)).'">'.esc_html(get_blog_option($id,'blogname')).'</a></strong><br><a href="'.esc_url(get_home_url($id)).'">'.($local?'Lokaal bekijken':'Online bekijken').' ↗</a><span class="description">Gewijzigd: '.esc_html(self::date($site->last_updated)).'</span></td><td><span data-online-state>'.esc_html($status).'</span>';
-            if($local){echo '<span class="description" data-checked>Laatste controle: '.esc_html(self::date($checked['checked_at']??'')).'</span><span class="description" data-status-error role="status">'.esc_html($checked['error']??'').'</span>';if(!empty($bound['url'])){echo '<a href="'.esc_url($bound['url']).'">Online bekijken ↗</a>';}}
+            echo '<tr data-site-id="'.$id.'" data-connected="'.($local&&(!empty($bound['site'])||$pending)?'1':'0').'"><td><strong><a href="'.esc_url(Sites::url($id)).'">'.esc_html(get_blog_option($id,'blogname')).'</a></strong><br><a href="'.esc_url(get_home_url($id)).'" target="_blank" rel="noopener">'.($local?'Lokaal bekijken':'Online bekijken').' ↗</a><span class="description">Gewijzigd: '.esc_html(self::date($site->last_updated)).'</span></td><td><span data-online-state>'.esc_html($status).'</span>';
+            if($local){echo '<span class="description" data-checked>Laatste controle: '.esc_html(self::date($checked['checked_at']??'')).'</span><span class="description" data-status-error role="status">'.esc_html($checked['error']??'').'</span>';if(!empty($bound['url'])){echo '<a href="'.esc_url($bound['url']).'" target="_blank" rel="noopener">Online bekijken ↗</a>';}}
             echo '</td><td><a data-activity href="'.esc_url(Sites::url($id,'activiteit')).'">'.esc_html(empty($bound['site'])?'Nog niet online':self::visitSummary($bound['activity']??[])).'</a></td><td><a href="'.esc_url(Sites::url($id,'opvolging')).'">'.esc_html(FollowUp::labels()[$follow['stage']]??'Nog benaderen').'</a>'.($follow['date']?'<br><strong>'.esc_html((FollowUp::due($follow)?'Opvolgen: ':'Gepland: ').$follow['date']).'</strong>':'').($follow['price']?'<br>'.esc_html($follow['price']):'').'</td><td class="emsf-actions-cell"><div class="emsf-row-actions"><a class="button" href="'.esc_url(Sites::url($id)).'">'.($pending?'Publicatie hervatten':'Beheren').'</a><a class="emsf-edit-link" href="'.esc_url(get_admin_url($id)).'">Site bewerken</a></div></td></tr>';
         }
         if(!$count){echo '<tr><td colspan="5">Geen sites gevonden. Pas de filters aan of maak een nieuw lokaal concept.</td></tr>';}
@@ -214,14 +215,15 @@ final class Admin {
         $onlineStatus=!empty($bound['deleted'])?'Online verwijderd':($hasOnline?($states[$bound['state']??'']??'Status controleren'):'Nog niet gepubliceerd');
         if(($bound['state']??'')==='ready'&&isset($bound['preview_mode'])){$onlineStatus.=$bound['preview_mode']==='public'?' · zonder code':($bound['preview_mode']==='code'?' · met code':' · alleen ingelogd');}
         echo '<div class="wrap emsf-wrap">';self::navigation();echo '<header class="emsf-heading"><p class="emsf-eyebrow">EMONKS · SITE FACTORY · '.($local?'LOKAAL':'ONLINE').'</p><h1>'.esc_html($name).'</h1><nav class="emsf-site-links" aria-label="Dit voorstel openen">';
-        if($localUrl){echo '<a href="'.esc_url($localUrl).'"'.(!$local?' title="Opent de lokale werkversie op je eigen computer"':'').'>Lokaal bekijken ↗</a>';}
-        if($hasOnline){echo '<a href="'.esc_url($bound['url']).'">Online bekijken ↗</a>';}
+        if($localUrl){echo '<a href="'.esc_url($localUrl).'" target="_blank" rel="noopener"'.(!$local?' title="Opent de lokale werkversie op je eigen computer"':'').'>Lokaal bekijken ↗</a>';}
+        if($hasOnline){echo '<a href="'.esc_url($bound['url']).'" target="_blank" rel="noopener">Online bekijken ↗</a>';}
         echo '<a href="'.esc_url(get_admin_url($id)).'">'.($local?'Lokaal bewerken':'Online bewerken').' ↗</a><span class="emsf-site-state">'.esc_html(($local&&$site->archived?'Lokaal gearchiveerd · ':'').$onlineStatus).($local&&$hasOnline?' · laatst opgehaald':'').'</span></nav></header><div class="emsf-workspace"><nav class="emsf-tabs" role="tablist" aria-orientation="vertical" aria-label="Onderdelen van deze site">';
-        foreach(['publicatie'=>'Publiceren','ophalen'=>'Online → lokaal','opvolging'=>'Klantopvolging','toegang'=>'Preview & klanttoegang','gebruikers'=>'Gebruikers','activiteit'=>'Activiteit','email'=>'Mails maken','beheer'=>'Beheer & herstel']as$tab=>$label){
+        foreach(['publicatie'=>'Publiceren','ophalen'=>'Online → lokaal','oplevering'=>'Oplevering','opvolging'=>'Klantopvolging','toegang'=>'Preview & klanttoegang','gebruikers'=>'Gebruikers','activiteit'=>'Activiteit','email'=>'Mails maken','beheer'=>'Beheer & herstel']as$tab=>$label){
             if(!$local&&in_array($tab,['publicatie','ophalen'],true)){continue;}$selected=self::activeTab()===$tab;
             echo '<a role="tab" id="emsf-tab-'.$tab.'" aria-controls="'.$tab.'" aria-selected="'.($selected?'true':'false').'" tabindex="'.($selected?'0':'-1').'" href="'.esc_url(Sites::url($id,$tab)).'">'.esc_html($label).'</a>';
         }
         echo '</nav><div class="emsf-panels">';
+        echo '<section class="emsf-panel"'.self::panel('oplevering').'>'; \Emonks\Factory\Handover::panel($id); echo '</section>';
         if($local){
             echo '<section class="emsf-panel"'.self::panel('publicatie').'><p class="emsf-eyebrow">VAN LOKAAL NAAR ONLINE</p><h2>'.($hasOnline?'Online inhoud bijwerken':'Eerste online publicatie').'</h2>';
             $connected=true;try{$target=$hasOnline?$bound['url']:Client::endpoint().'/'.$p['slug'].'/';echo '<p>Alleen dit voorstel gaat naar <strong>'.esc_html($target).'</strong>.</p>';}catch(\Throwable $e){$connected=false;echo '<div class="emsf-callout"><p>Online verbinding nog niet ingesteld. Je kunt het lokale voorstel alvast bewerken.</p><a href="'.esc_url(network_admin_url('admin.php?page=emsf-connection')).'">Online verbinding instellen →</a></div>';}
@@ -336,6 +338,16 @@ final class Admin {
         echo '<section'.self::panel('activiteit').'><h2 class="emsf-section-title">Activiteit van dit voorstel</h2><p>Online bron · '.(Sites::local()?'opgeslagen status; haal de actuele gegevens op met Status controleren.':'actuele lokale registratie van deze online site.').'</p>';
         if(!$online){echo '<div class="emsf-panel"><h3>Nog geen online activiteit</h3><p>Na publicatie zie je hier anonieme previewbezoeken, klantlogins en dashboardopeningen.</p></div></section>';return;}
         if(Sites::local()){self::form($id,'status','online','Activiteit ophalen',static fn()=>print('<p class="description">Leest uitsluitend de online status.</p>'));}
+        $notices=$snapshot['website_notices']??null;
+        echo '<div class="emsf-panel"><h3>Meldingen op de website</h3>';
+        if(is_array($notices)){
+            self::form($id,'website_notices','online','Weergave opslaan',static function()use($notices){
+                echo '<p><label>Meldingen op deze website<br><select name="website_notices_mode">';
+                foreach(['inherit'=>'Standaard volgen ('.(!empty($notices['default'])?'Tonen':'Verbergen').')','show'=>'Tonen','hide'=>'Verbergen']as$value=>$label){echo '<option value="'.esc_attr($value).'" '.selected($notices['mode']??'inherit',$value,false).'>'.esc_html($label).'</option>';}
+                echo '</select></label></p><p>Regelt alleen de teksten onderaan deze online website. Mailblokkade, registratie en meldingen aan de maker blijven ongewijzigd.</p>';
+            });
+        }else{echo '<p>Werk Site Factory online bij naar 0.22.0 en haal de activiteit opnieuw op om de weergave per site in te stellen.</p>';}
+        echo '</div>';
         $policy=$snapshot['policy']??['enabled'=>true,'recipient'=>'','notify_view'=>false,'notify_login'=>false];$events=$snapshot['events']??[];
         echo '<div class="emsf-panel"><h3>Activiteitenlog</h3><p>Laatste 30 dagen, maximaal 100 gebeurtenissen. Herladen en mediabestanden tellen niet opnieuw mee; een nieuwe sessie wel. Een gedeelde code of deellink bewijst geen identiteit. Netwerkbeheerderbezoeken tellen niet mee.</p>';
         if(!$events){echo '<p class="emsf-callout">Nog geen bevestigde bezichtiging of klantlogin geregistreerd.</p>';}
@@ -433,10 +445,12 @@ final class Admin {
                 if($site->archived||$site->deleted){throw new \RuntimeException('Herstel het lokale concept vóór publicatie.');}
                 return Client::push($p['slug'],$action,$confirm,self::customerInput($data),array_intersect_key($data,array_flip(['expected_revision','replace_changes','preview_protected'])));
             }
-            return Client::manage($p['slug'],$action,$confirm,array_intersect_key($data,array_flip(['operation','delete_confirm','mail_mode','activity_enabled','activity_recipient','activity_confirmed','notify_view','notify_login','notify_content','activity_inherit','customer_id','expected_customer_id','customer','assign_customer'])));
+            return Client::manage($p['slug'],$action,$confirm,array_intersect_key($data,array_flip(['operation','delete_confirm','mail_mode','website_notices_mode','activity_enabled','activity_recipient','activity_confirmed','notify_view','notify_login','notify_content','activity_inherit','customer_id','expected_customer_id','customer','assign_customer'])));
         }
+        // Direct online admin requests do not pass through the REST theme_slug callback.
+        \Emonks\Factory\ThemeRelease::useRequestSlug((string)get_blog_option($id,'stylesheet'));
         $request=new \WP_REST_Request('POST');$request->set_header('Content-Type','application/json');
-        $request->set_body(wp_json_encode(['source'=>get_site_meta($id,'emsf_source',true),'action'=>$action,'confirm'=>$confirm,'operation'=>$data['operation']??'','delete_confirm'=>$data['delete_confirm']??'','mail_mode'=>$data['mail_mode']??'']+array_intersect_key($data,array_flip(['activity_enabled','activity_recipient','activity_confirmed','notify_view','notify_login','notify_content','activity_inherit','customer_id','expected_customer_id','customer','assign_customer']))));
+        $request->set_body(wp_json_encode(['source'=>get_site_meta($id,'emsf_source',true),'action'=>$action,'confirm'=>$confirm,'operation'=>$data['operation']??'','delete_confirm'=>$data['delete_confirm']??'','mail_mode'=>$data['mail_mode']??'']+array_intersect_key($data,array_flip(['website_notices_mode','activity_enabled','activity_recipient','activity_confirmed','notify_view','notify_login','notify_content','activity_inherit','customer_id','expected_customer_id','customer','assign_customer']))));
         return Accounts::silent(static fn()=>Store::locked('receiver-'.get_current_network_id(),static fn()=>Receiver::manage($request)));
     }
     public static function submit(): void {

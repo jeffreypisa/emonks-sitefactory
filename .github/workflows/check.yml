@@ -8,4 +8,27 @@ jobs:
       - name: PHP syntax
         run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
       - name: Build runtime-only package
-        run: python3 scripts/build-zip.py
+        run: |
+          python3 scripts/build-zip.py
+          python3 scripts/build-importer.py
+
+      - name: Handover policy
+        run: |
+          php tests/handover-policy.php
+          php tests/handover-library.php
+          php tests/package-documents.php
+          php tests/package-known-metadata.php
+          php tests/handover-comments.php
+          php tests/delivery-software.php
+          php tests/full-site-policy.php
+          php tests/full-site-hosting.php
+          php tests/commerce-import-cache.php
+          php tests/upload-transport.php
+          php tests/publication-result.php
+          php tests/publication-result.php ajax
+          node tests/admin-check-feedback.cjs
+          node tests/direct-import-ui.cjs
+          php tests/archive-download.php
+          php tests/online-admin-theme.php
+          php tests/admin-login.php
+          php tests/admin-login.php rest

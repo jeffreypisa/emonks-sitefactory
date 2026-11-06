@@ -50,7 +50,7 @@ final class Receiver {
         if (empty($request['operation']) && !empty($link['operation'])) { $request['operation'] = substr($link['operation'], 3); }
         $op = !empty($request['operation']) ? Store::read(self::operation($request)) : [];
         if ($op && $op['source'] !== self::source($request)) { throw new \RuntimeException('Verkeerde operatiebron.'); }
-        return ['software_update'=>true,'environment'=>\Emonks\Factory\ThemeRelease::environment(), 'plugin_version'=>\Emonks\Factory\ThemeRelease::pluginVersion(), 'protocol'=>4, 'content_pull'=>true, 'optional_customer'=>true, 'customer_management'=>true, 'optional_preview'=>true, 'persistent_preview'=>true, 'publication_check'=>true, 'theme'=>['version'=>\Emonks\Factory\ThemeRelease::version(),'digest'=>Package::theme_digest(),'releases'=>\Emonks\Factory\ThemeRelease::releases()], 'activity'=>!empty($link['site'])&&empty($link['deleted'])?Activity::snapshot((int)$link['site']):[], 'customer'=>!empty($link['site']) && empty($link['deleted']) ? Accounts::details((int)$link['site']) : [], 'link'=>$link, 'operation'=>$op ? ['id'=>substr(self::operation($request),3)]+array_intersect_key($op, array_flip(['status','site','backup','error','action','created'])) : []];
+        return ['software_update'=>true,'dashboard_update'=>true,'environment'=>\Emonks\Factory\ThemeRelease::environment(), 'plugin_version'=>\Emonks\Factory\ThemeRelease::pluginVersion(), 'protocol'=>4, 'content_pull'=>true, 'optional_customer'=>true, 'customer_management'=>true, 'optional_preview'=>true, 'persistent_preview'=>true, 'publication_check'=>true, 'theme'=>['version'=>\Emonks\Factory\ThemeRelease::version(),'digest'=>Package::theme_digest(),'releases'=>\Emonks\Factory\ThemeRelease::releases()], 'activity'=>!empty($link['site'])&&empty($link['deleted'])?Activity::snapshot((int)$link['site']):[], 'customer'=>!empty($link['site']) && empty($link['deleted']) ? Accounts::details((int)$link['site']) : [], 'link'=>$link, 'operation'=>$op ? ['id'=>substr(self::operation($request),3)]+array_intersect_key($op, array_flip(['status','site','backup','error','action','created'])) : []];
     }
     /** Private, authenticated data-only export. One expiring snapshot per source. */
     public static function download($request): array {
@@ -125,7 +125,7 @@ final class Receiver {
         return ['status'=>'receiving'];
     }
     public static function assetName(string $name): void {
-        if (!preg_match('~^(media|fonts)/[a-zA-Z0-9_./-]+\.(jpe?g|png|webp|gif|svg|avif|ico|pdf|woff2?|ttf|otf|css|txt|json)$~iD', $name) || str_contains($name, '..')) { throw new \RuntimeException('Onveilig bestandspad.'); }
+        if (!preg_match('~^(media|fonts)/[a-zA-Z0-9_./-]+\.(jpe?g|png|webp|gif|svg|avif|ico|pdf|docx|woff2?|ttf|otf|css|txt|json)$~iD', $name) || str_contains($name, '..')) { throw new \RuntimeException('Onveilig bestandspad.'); }
     }
     public static function asset($request): array {
         $key = self::operation($request); $op = Store::read($key);
@@ -161,7 +161,7 @@ final class Receiver {
             $op['status'] = 'creating'; Store::write($key, $op);
             // Persist the reservation BEFORE creation; crashes never silently adopt another site.
             Store::write($linkKey, ['source'=>$source, 'path'=>$path, 'operation'=>$key, 'site'=>0]);
-            $site = wp_insert_site(['domain'=>$network->domain,'path'=>$path,'network_id'=>$network->id,'public'=>0,'user_id'=>get_current_user_id(),'title'=>$package['prospect']['name'],'options'=>['emsf_uuid'=>$source,'blog_public'=>0],'meta'=>['emsf_managed'=>1,'emsf_mail_mode'=>'off','emsf_state'=>'importing','emsf_preview_mode'=>$op['preview_mode']??'closed','emsf_source'=>$source]]);
+            $site = wp_insert_site(['domain'=>$network->domain,'path'=>$path,'network_id'=>$network->id,'public'=>0,'user_id'=>get_current_user_id(),'title'=>$package['prospect']['name'],'options'=>['emsf_uuid'=>$source,'blog_public'=>0],'meta'=>['emsf_managed'=>1,'emsf_mail_mode'=>'on','emsf_state'=>'importing','emsf_preview_mode'=>$op['preview_mode']??'closed','emsf_source'=>$source]]);
             if (is_wp_error($site)) { throw new \RuntimeException($site->get_error_message()); }
             $link['site'] = (int)$site; $link['source'] = $source; $link['path'] = $path;
             Store::write($linkKey, $link);
@@ -259,7 +259,7 @@ final class Receiver {
         }
         self::linked($link, $source);
         $site = (int)$link['site']; $data = $request->get_json_params(); $action = $data['action'] ?? '';
-        if (!in_array($action,['preview_get','preview_generate','preview_rotate','preview_revoke','preview_public','setup_link','activity_settings','users_get','customer_set','user_create'],true) && ($data['confirm'] ?? '') !== get_blog_option($site, 'blogname')) { throw new \RuntimeException('Bevestig met de exacte online sitenaam.'); }
+        if (!in_array($action,['preview_get','preview_generate','preview_rotate','preview_revoke','preview_public','setup_link','activity_settings','website_notices','users_get','customer_set','user_create'],true) && ($data['confirm'] ?? '') !== get_blog_option($site, 'blogname')) { throw new \RuntimeException('Bevestig met de exacte online sitenaam.'); }
         if($action==='retry_models'){return self::retryModels($request,$link);}
         $state = get_site_meta($site, 'emsf_state', true);
         if (in_array($action,['preview_get','preview_generate','preview_rotate','preview_revoke','preview_public'],true)) {
@@ -280,6 +280,7 @@ final class Receiver {
             if($action==='user_create'){Accounts::createUser($site,$source,(array)($data['customer']??[]),!empty($data['assign_customer']));}
             return self::status($request)+['users'=>Accounts::users($site),'customer_id'=>(int)get_site_meta($site,'emsf_customer_id',true),'users_saved'=>$action!=='users_get'];
         }
+        if ($action === 'website_notices') { NotificationSettings::saveSiteWebsiteNotices($site,$data);return self::status($request); }
         if ($action === 'activity_settings') { Activity::configure($site,$data);return self::status($request); }
         if ($action === 'mail') { Mail::set($site,(string)($data['mail_mode']??'')); }
         elseif ($action === 'archive' && $state === 'ready') { update_site_meta($site, 'emsf_state', 'archived'); }

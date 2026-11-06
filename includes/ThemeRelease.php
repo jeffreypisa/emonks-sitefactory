@@ -20,11 +20,25 @@ final class ThemeRelease {
         preg_match('/^ \* Version:\s*(\S+)/m', (string)file_get_contents(dirname(__DIR__).'/emonks-site-factory.php'), $match);
         return $match[1] ?? '';
     }
+    /** Discover the actual plugin folder, including existing websitebeheer installs. */
+    public static function dashboard(): array {
+        if(!function_exists('get_plugins')){require_once ABSPATH.'wp-admin/includes/plugin.php';}
+        $found=[];
+        foreach(get_plugins() as $file=>$data){
+            if(basename($file)==='websitebeheer.php'&&($data['Name']??'')==='Emonks Dashboard'){
+                $slug=dirname($file);self::validateSlug($slug);
+                $found[]=['slug'=>$slug,'file'=>$file,'version'=>trim((string)($data['Version']??'')),'installed'=>true,'network_active'=>isset(((array)get_site_option('active_sitewide_plugins',[]))[$file])];
+            }
+        }
+        if(count($found)>1){throw new \RuntimeException('Meerdere Emonks Dashboard-installaties gevonden. Verwijder eerst de dubbele pluginmap.');}
+        return $found[0]??['slug'=>'emonks-dashboard','file'=>'emonks-dashboard/websitebeheer.php','version'=>'','installed'=>false,'network_active'=>false];
+    }
     public static function environment(): array {
         $theme = wp_get_theme(self::slug());
         return [
             'theme'=>['slug'=>self::slug(), 'name'=>$theme->get('Name'), 'version'=>self::version(), 'installed'=>$theme->exists(), 'enabled'=>$theme->exists() && $theme->is_allowed('network')],
             'plugin'=>['version'=>self::pluginVersion()],
+            'dashboard'=>self::dashboard(),
             'acf'=>['active'=>function_exists('acf_get_field'), 'pro'=>defined('ACF_PRO') && ACF_PRO, 'version'=>defined('ACF_VERSION') ? ACF_VERSION : ''],
             'hosting'=>['verified'=>defined('EMSF_PRIVATE_HOSTING_VERIFIED') && EMSF_PRIVATE_HOSTING_VERIFIED],
         ];

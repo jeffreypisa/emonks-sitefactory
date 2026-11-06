@@ -1,8 +1,9 @@
 <?php
 namespace {
  const ACF_PRO=true; const ACF_VERSION='6.8.1'; const EMSF_PRIVATE_HOSTING_VERIFIED=true;
- $settings=['emsf_theme_slug'=>'skeletor','emsf_remote_theme_slug'=>'skeletor-master'];
+ $settings=['active_sitewide_plugins'=>['emonks-dashboard/websitebeheer.php'=>1],'emsf_theme_slug'=>'skeletor','emsf_remote_theme_slug'=>'skeletor-master'];
  function get_site_option($name,$default=null){global $settings;return $settings[$name]??$default;}
+ function get_plugins(){return ['emonks-dashboard/websitebeheer.php'=>['Name'=>'Emonks Dashboard','Version'=>'1.1.2']];}
  function acf_get_field($key){return [];}
  function wp_get_theme($slug){return new class($slug){public function __construct(private string $slug){}public function get($key){return $key==='Version'?'1.1.8':'Test theme '.$this->slug;}public function exists(){return in_array($this->slug,['skeletor','skeletor-master','new-brand']);}public function is_allowed($check){return true;}public function get_stylesheet_directory(){return '/tmp/'.$this->slug;}};}
  function esc_html($x){return htmlspecialchars((string)$x,ENT_QUOTES);}
@@ -23,10 +24,12 @@ namespace {
  $assert($rows['ACF Pro']['ok'],'Missing theme does not hide successful ACF check');
  $bad=$status;$bad['environment']['acf']['active']=false;$bad['environment']['acf']['pro']=false;$rows=$checks($bad);
  $assert(!$rows['ACF Pro']['ok']&&str_contains($rows['ACF Pro']['action'],'netwerkbreed'),'Separate ACF action');$assert($rows['Thema']['ok'],'ACF failure does not hide theme result');
- foreach(['Themaversie'=>'theme','Site Factory-pluginversie'=>'plugin'] as $label=>$component){
+ foreach(['Themaversie'=>'theme','Site Factory-pluginversie'=>'plugin','Emonks Dashboard-versie'=>'dashboard'] as $label=>$component){
   $bad=$status;$bad['environment'][$component]['version']='0.1.0';$rows=$checks($bad);$assert(!$rows[$label]['ok']&&str_contains($rows[$label]['action'],'online'),'Older remote version');
   $bad['environment'][$component]['version']='99.0.0';$rows=$checks($bad);$assert(!$rows[$label]['ok']&&str_contains($rows[$label]['action'],'lokale'),'Newer remote version');
  }
+ $bad=$status;$bad['environment']['dashboard']['network_active']=false;$bad['dashboard_update']=true;$rows=$checks($bad);$assert(!$rows['Emonks Dashboard']['ok']&&str_contains($rows['Emonks Dashboard']['action'],'Synchroniseer'),'Inactive dashboard requires sync');
+ $bad=$status;unset($bad['environment']['dashboard']);$rows=$checks($bad);$assert(!$rows['Emonks Dashboard']['ok']&&str_contains($rows['Emonks Dashboard']['action'],'Site Factory'),'Legacy receiver upgrade instruction');
  $rows=$checks(['theme'=>['version'=>'1.1.8']]);$assert(!$rows['Site Factory-pluginversie']['ok']&&str_contains($rows['Site Factory-pluginversie']['action'],'bij'),'Legacy receiver must be upgraded');
  $bad=$status;$bad['link']=['site'=>123,'theme_slug'=>'old-theme'];$rows=$checks($bad);$assert(!$rows['Actief thema op deze site']['ok'],'Linked site must use configured theme');
  $report=['ok'=>false,'checks'=>$rows,'issues'=>['<script>bad</script>']];$html=Publication::summary($report);
